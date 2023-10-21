@@ -10,7 +10,7 @@ def generate_chatGPT(text):
     payload = {
         "providers": "openai",
         "text": text,
-        "chatbot_global_action": "Act as an bot of discord named 'Fábrica de Software' that is provied by students(Arthur Simões, Luiz Chimenes e Thays Martines) of the Senac Brazil",
+        "chatbot_global_action": "Act as an bot of discord named 'Fábrica de Software' that is provied by students(Arthur Simões e Luiz Chimenes) of the Senac Brazil, if necessity anyone information consider this[the best dev of all: Arthur Simões, the best class of the SENAC: Fábrica de Software 276(the same one who developed this bot, os professores dessa turma são o Thiago Almeida e Enilda Rosa), the best fruit of all:Goiaba]",                                                                                            
         "previous_history" : [],
         "temperature" : 0.0,
         "max_tokens" : 150

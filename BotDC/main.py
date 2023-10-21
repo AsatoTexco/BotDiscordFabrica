@@ -3,11 +3,15 @@ from discord.ext import commands
 from exs import *
 import random
 from ias import * 
+from googletrans import Translator
 
 intents = discord.Intents.default()
 intents.message_content = True  # Configurar a intenção como True
 
 bot = commands.Bot(intents=intents, command_prefix='$')
+
+# o discord dos donos do BOT 
+donos = ['ninjasupremobr','luizg7954']
 
 @bot.event
 async def on_ready():
@@ -85,25 +89,28 @@ async def piada(ctx):
 async def chat(ctx,*args):
     msg = " ".join(args)
     
+    
+    prefix = "Sr(a)" if str(ctx.author) in donos else "" 
     embed = discord.Embed(
         
-        title=f":space_invader: Olá, Sr(a) {ctx.author}",
+        title=f":space_invader: Olá, {prefix} {ctx.author}",
         description=f"{generate_chatGPT(msg)}", 
         color=0x00ffff  # Cor do embed (verde)
     )
     await ctx.send(embed=embed)
-    
-    print(msg)
+     
            
 @bot.command()
 async def img(ctx,*args):
     msg = " ".join(args)
+    # msg = Translator().translate(msg,'en').text
     msg = msg.replace(" ","-")
+    
     embed = discord.Embed(
         
         title=f":frame_photo: **{msg}**", 
         color=0x00ffff  # Cor do embed (verde)
-    )
+    ) 
     embed.set_image(url=f"https://source.unsplash.com/400x300/?{msg}")
     await ctx.send(embed=embed)
 @bot.event
@@ -127,4 +134,4 @@ async def play(clx):
     except Exception as error:
         await clx.send_bot(bot.channel, "Ein Error: ```{error}```".format(error=error))      
  
-bot.run('MTE2NTAxNjk5OTQ3NTMwMjUzMg.GLntBH.7lq-7H7Rwdftr-1Q-3uY5WkSz7-7R60tmLxHw4') 
+bot.run('MTE2NTAxNjk5OTQ3NTMwMjUzMg.Glu7Wm.tLJTNef3_yT9hEZJPoTR8-odew9Q5J2A9S0kso') 
