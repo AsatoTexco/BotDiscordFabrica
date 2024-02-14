@@ -2,9 +2,10 @@ import random
 import requests
 import json
 from googletrans import Translator
+import os
 
 
-
+ 
 exercicios = [
     "calculate-bmi",
     "convert-a-number-to-a-string",
@@ -110,24 +111,35 @@ exercicios = [
 
 
 def random_ex():
-    while True:
+    op = random.randint(1, 3)
+    while True: 
         try: 
-            ex = random.choice(exercicios) 
+            if(op == 1 or op == 2):
+                with open(f'{os.getcwd()}/BotDC/exs.json', 'r', encoding='utf-8') as arquivo_json:
+                    ex_maratona = json.load(arquivo_json)
 
-            url = 'https://www.codewars.com/api/v1/code-challenges/'+ex
+                dados = random.choice(ex_maratona)  
 
-            response = requests.get(url).text
-            titulo = json.loads(response)['name']
-            descricao = json.loads(response)['description'].replace("~~~","")
+            else:
+                
+                ex = random.choice(exercicios) 
 
-            translator = Translator()
-            descricaoTrad = translator.translate(descricao, src="en", dest="pt").text
-            print(descricao)
-            response = [titulo,descricaoTrad]
+                url = 'https://www.codewars.com/api/v1/code-challenges/'+ex
+
+                response = requests.get(url).text
+                titulo = json.loads(response)['name']
+                descricao = json.loads(response)['description'].replace("~~~","")
+
+                translator = Translator()
+                descricaoTrad = translator.translate(descricao, src="en", dest="pt").text
+                print(response)
+                dados = [titulo,descricaoTrad]
             break
-        except:
+        except Exception as e:
+            print(e)
             continue
-    return response
+    response = [op,dados]
+    return response 
 
 def get_conselho():
     while True:
