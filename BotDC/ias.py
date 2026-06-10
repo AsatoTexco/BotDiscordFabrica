@@ -2,7 +2,7 @@ import json
 import requests
 
  
-def generate_chatGPT(text):
+async def generate_chatGPT(text) -> str:
     
     headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZGMzODA5NzAtMTRlYy00MzY3LThmNGEtYTZhYzc5NTFjYjA4IiwidHlwZSI6ImFwaV90b2tlbiJ9.fgy2wdjQMpyg2XwJ-YD6XwDZZmBNOtj7nOgE9i4lDMM"}
 
@@ -10,7 +10,8 @@ def generate_chatGPT(text):
     payload = {
         "providers": "openai",
         "text": text,
-        
+        # "chatbot_global_action": """Seja um bot binário, respondendo perguntas com precisão objetiva. Utilize apenas '1' para 'sim' e '0' para 'não'. As respostas devem ser sempre um único caractere""",                                                                                            
+
         "chatbot_global_action": """Act as an bot of discord named 'Fábrica de Software' that is provied by Arthur Simões. [best fruit: Goiaba,
                                                                                                                             best people: Arthur Simões,
                                                                                                                             worse people: Gabriel Miron,
@@ -20,7 +21,7 @@ def generate_chatGPT(text):
                                                                                                                             leader or owner of the mega bow: Arthur Simões ou Ninja,
                                                                                                                             Founder of the mega bow: Gustavo20l
                                                                                                                             current legends of the mega bow: Galahead, Alumes, Gustavo20l, kayky, Ninja, gabriel626 e Dinooorexxx,
-                                                                                                                            co leaders of the mega bow: Gustavo20l, Floucee, Naruto
+                                                                                                                            co leaders of the mega bow: Gustavo20l, Naruto
                                                                                                                             characteristics of Terra or Sunny or Gabriel Djames (member of mega bow): lives in Brazil rio grande do sul in Rua irani carlos dos santos, plays a lot of shaco having 900k+ mastery with this champion; has a desire to dismantle a PC in his house, friend of Gabriel Miron called Galahead on discord,
                                                                                                                             characteristics of Gustavo20L (member of mega bow): Founder of Mega Bow, is attracted to married women, owns the Mega Bow YouTube channel, lives in Minas Gerais, has an unshakable honor, likes to play medieval and war games,
                                                                                                                             characteristics of Gabriel Miron or Galahead or gabuncio (member of mega bow): the richest on the server, humble, plays with Ornn, Volibear and Rengar, having 180k+ of ornn mastery, official sponsor of the mega bow,
@@ -33,7 +34,7 @@ def generate_chatGPT(text):
                                                                                                                             ]""",                                                                                            
         "previous_history" : [],
         "temperature" : 0.0,
-        "max_tokens" : 150
+        "max_tokens" : 450
         }
 
     response = requests.post(url, json=payload, headers=headers)

@@ -1,7 +1,6 @@
 import random
 import requests
-import json
-from googletrans import Translator
+import json 
 import os
 
 
@@ -115,7 +114,7 @@ def random_ex():
     while True: 
         try: 
             if(op == 1 or op == 2):
-                with open(f'{os.getcwd()}/BotDC/exs.json', 'r', encoding='utf-8') as arquivo_json:
+                with open(f'{os.getcwd()}/exs.json', 'r', encoding='utf-8') as arquivo_json:
                     ex_maratona = json.load(arquivo_json)
 
                 dados = random.choice(ex_maratona)  
@@ -130,10 +129,8 @@ def random_ex():
                 titulo = json.loads(response)['name']
                 descricao = json.loads(response)['description'].replace("~~~","")
 
-                translator = Translator()
-                descricaoTrad = translator.translate(descricao, src="en", dest="pt").text
-                print(response)
-                dados = [titulo,descricaoTrad]
+                 
+                dados = [titulo,descricao]
             break
         except Exception as e:
             print(e)
@@ -146,9 +143,7 @@ def get_conselho():
         try:
             url = "	https://api.adviceslip.com/advice"
             
-            conselho = json.loads(requests.get(url).text)['slip']['advice']
-            translator = Translator()
-            conselho = translator.translate(conselho, src="en", dest="pt").text
+            conselho = json.loads(requests.get(url).text)['slip']['advice']  
             return conselho
         except:
             continue
@@ -158,12 +153,7 @@ def random_joke():
     
     piada  = json.loads(requests.get(url).text)
     question = piada['setup']
-    response = piada['punchline'] 
-    
-    translator = Translator()
-    
-    question = translator.translate(question,src='en',dest='pt').text
-    response = translator.translate(response,src='en',dest='pt').text
-    
+    response = piada['punchline']  
+      
     return [question,response]
 # Agora você tem a lista de exercícios em Python.

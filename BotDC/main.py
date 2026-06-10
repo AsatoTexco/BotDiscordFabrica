@@ -1,30 +1,27 @@
 import discord
-import sys  
-from discord.ext import commands
+import time   
 from exs import *
 import random
 from ias import *  
 from text_to_speech import *
-from dotenv import load_dotenv   
-import os 
-from functools import partial
-from pytube import YouTube 
-import asyncio 
-from youtubesearchpython import VideosSearch
-from musicController import *
-from playlist import *
-
-
+from dotenv import load_dotenv     
+import asyncio     
+from discord import app_commands 
+ 
+from Models.Dj import Dj
 
 load_dotenv()
 
+punishments = {} # {user: *call para callback}
 intents = discord.Intents.default()
 intents.message_content = True  # Configurar a intenção como True
-
-bot = commands.Bot(intents=intents, command_prefix='$',description='esse é o Bot')
-
+bot = discord.Client(intents=intents)
+tree = app_commands.CommandTree(bot)
+ 
 # o discord dos donos do BOT 
 donos = ['ninjasupremobr']
+perm_stroll = ['ninjasupremobr',]
+perm_punishment = ['ninjasupremobr']
 
 def create_embed_pix(valor):
     url = ""
@@ -44,7 +41,7 @@ def create_embed_pix(valor):
             description=f"**R$ {valor},00** :cookie:",
             color=0x00ffff
     )
-    
+
     embed_pix.set_image(url=url)
     embed_pix.set_thumbnail(url="https://iili.io/Jo3AOhu.png")
     embed_pix.add_field(name="Copia e Cola:", value=f"{pix_copy}", inline=False)
@@ -120,20 +117,39 @@ def create_btns_pix_enviado():
     
 @bot.event
 async def on_ready():
+    await tree.sync(guild=discord.Object(id=722857509659869204))
     print(f'Logged on as {bot.user}!')
     channel_id = 1176698533039059055  # Substitua pelo ID do canal desejado
     channel = bot.get_channel(channel_id)
+
+   
+ 
+     
+
+    await bot.change_presence(
+        status=discord.Status.online,
+        activity=discord.Activity(
+            type=discord.ActivityType.watching, 
+            name="A Ascensão do Mega Bow 🎥",
+            timestamps = {'start':1420070400000},
+            state='🍿',
+            assets={
+                'large_image': '1207840321027706901',
+                'large_text' : 'TIRANIA',
+                'small_image': '1207840321027706901',
+            }
+        )
+    )
     if channel:
         await channel.send(" :fire:  **Estou online e pronto!**  :fire:") 
 
-# @bot.command()
-# async def teste(ctx, *args):
-#     # Responder ao comando !teste com a mensagem "teste"
-#     msg = " ".join(args)
-#     await ctx.send(f"{msg}")
-
-@bot.command()
-async def commands(ctx):
+ 
+@tree.command(
+    name="commands",
+    description="Veja todos os comandos disposníveis para mim 😉",
+    guild=discord.Object(id=722857509659869204)
+)
+async def commands(interaction: discord.Interaction):
     msg = """**$ex** - gera um exercício de maratonas de programação(Codewars e Senac)
 **$play {nome/link}** - Escolha uma música por vez e aproveite :)
 **$stop** - Pare a sua música
@@ -153,11 +169,15 @@ async def commands(ctx):
     color=0x00ffff
     )
         
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
 
-@bot.command()
-async def pix(ctx):
+@tree.command(
+    name="pix",
+    description="Ajude o criador do BOT com um Pixxx! 🤑",
+    guild=discord.Object(id=722857509659869204)
+)
+async def pix(interaction:discord.Interaction):
     # Criar um objeto Embed
     embed_doacao = discord.Embed(
         title=":dollar: **PIX** :euro:", 
@@ -172,14 +192,14 @@ async def pix(ctx):
     button3 = discord.ui.Button(style=discord.ButtonStyle.green , label="R$ 10,00(Cookie)")
     
     # Definir a função de retorno de chamada para o botão
-    async def pix1(interaction: discord.Interaction):  
-        await interaction.response.send_message(embed=create_embed_pix(1),view=create_btns_pix_enviado())
+    async def pix1(inter: discord.Interaction):  
+        await inter.response.send_message(embed=create_embed_pix(1),view=create_btns_pix_enviado())
         
-    async def pix5(interaction: discord.Interaction):  
-        await interaction.response.send_message(embed=create_embed_pix(5),view=create_btns_pix_enviado())
+    async def pix5(inter: discord.Interaction):  
+        await inter.response.send_message(embed=create_embed_pix(5),view=create_btns_pix_enviado())
         # o generoso de doar através do Pix, mas também por fazer parte da nossa comunidade. Seu apoio é fundamental para o crescimento e sucesso do Mega Bow. Muito obrigado por fazer parte dessa jornada conosco!
-    async def pix10(interaction: discord.Interaction):  
-        await interaction.response.send_message(embed=create_embed_pix(10),view=create_btns_pix_enviado())
+    async def pix10(inter: discord.Interaction):  
+        await inter.response.send_message(embed=create_embed_pix(10),view=create_btns_pix_enviado())
 
     button1.callback = pix1
     button2.callback = pix5
@@ -192,11 +212,15 @@ async def pix(ctx):
     view.add_item(button3)
 
     # Enviar o embed com a view para o canal
-    await ctx.send(embed=embed_doacao, view=view)
+    await interaction.response.send_message(embed=embed_doacao, view=view)
 
 
-@bot.command()
-async def ex(ctx):
+@tree.command(
+    name="ex",
+    description="Busque exercícios de maratonas de programação para se preparar",
+    guild=discord.Object(id=722857509659869204)
+)
+async def ex(interaction: discord.Interaction):
     emojis=[":dotted_line_face:",":face_with_raised_eyebrow:",":joy:",":star:",":face_with_monocle:",":interrobang:",":face_in_clouds:",":detective:",":smiling_imp:",":disguised_face:",":hot_face:",":fire:",":grimacing:",":shushing_face:"]
     questao = random_ex()
     print(questao[0])
@@ -211,8 +235,7 @@ async def ex(ctx):
         embed.set_image(url=questao[1]['image'])
         embed.set_thumbnail(url="https://iili.io/JKT3QWX.png")
         embed.set_footer(text="© Questão Original da Fábrica de Software", icon_url="https://iili.io/JKT3QWX.png")
-
-        
+   
     else: 
         
         embed = discord.Embed(
@@ -221,17 +244,16 @@ async def ex(ctx):
         color=0x00ffff
         ) 
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
     
-@bot.command()
-async def d(ctx,num): 
-    
-    num_rand = random.randrange(1, int(num) + 1)
-    if(num_rand == 4 or num_rand == 24):
-        descricao = "Hummm, la ele"
-        
-    else:
-        descricao = ""
+@tree.command(
+    name="d",
+    description="Escolha um dado e exeperimente a sua sorte",
+    guild=discord.Object(id=722857509659869204)
+)
+async def d(interaction: discord.Interaction, num: int):
+    num_rand = random.randint(1, num)
+    descricao = "Hummm, la ele" if num_rand in (4, 24) else ""
         
     embed = discord.Embed(
         title=f"{num_rand}",
@@ -239,20 +261,27 @@ async def d(ctx,num):
         color=0x00ff00   
     )
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command()
-async def conselho(ctx):
+@tree.command(
+    name="conselho",
+    description="Relaxa, que eu vou te aconselhar",
+    guild=discord.Object(id=722857509659869204)
+)
+async def conselho(interaction:discord.Interaction):
     embed = discord.Embed(
         title=f"**Conselho**",
         description=f"{get_conselho()}",
         color=0x032078   
     )
     
-    await ctx.send(embed=embed)
-
-@bot.command()
-async def piada(ctx):
+    await interaction.response.send_message(embed=embed)
+@tree.command(
+    name="piada",
+    description="Te conto um piada tão horrivel que você vai rir 😄",
+    guild=discord.Object(id=722857509659869204)
+)
+async def piada(interaction:discord.Interaction):
     
     emojis=[":dotted_line_face:",":face_with_raised_eyebrow:",":joy:",":star:",":face_with_monocle:",":interrobang:",":face_in_clouds:",":detective:",":smiling_imp:",":disguised_face:",":hot_face:",":fire:",":grimacing:",":shushing_face:"]
     piada = random_joke()
@@ -262,30 +291,42 @@ async def piada(ctx):
         description=f"{piada[1]}", 
         color=0x00ffff   
     )
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command()
-async def chat(ctx,*args):
-    msg = " ".join(args)
-    
-    
-    prefix = "Vossa Majestade Imperial" if str(ctx.author) in donos else "" 
-    embed = discord.Embed(
+@tree.command(
+    name="chat",
+    description="Me pergunte sobre qualquer coisa! EU SABO",
+    guild=discord.Object(id=722857509659869204)
+)
+async def chat(interaction: discord.Interaction, *, question: str):
+     
         
-        title=f":space_invader: Olá, {prefix} {ctx.author}",
-        title=f":space_invader: Olá, {prefix} {ctx.author}",
-        description=f"{generate_chatGPT(msg)}", 
-        color=0x00ffff  # Cor do embed (verde)
-    )
-    await ctx.send(embed=embed)
-     
-     
+
+        await interaction.response.defer(ephemeral=False,thinking=True) 
+         
+        # Gerar a resposta de forma assíncrona
+        response = await generate_chatGPT(question)
+
+        prefix = "Vossa Majestade Imperial" if str(interaction.user) in donos else ""
+        
+        embed = discord.Embed(
+            title=f":space_invader: Olá, {prefix} {interaction.user}",
+            description=response,
+            color=0x00ffff  # Cor do embed (ciano)
+        )
+
+        # await interaction.response.send_message(embed=embed)  # Enviar a resposta final
+
+        await interaction.followup.send(embed=embed) 
+    
            
-@bot.command()
-async def img(ctx,*args):
-    msg = " ".join(args)
-    # msg = Translator().translate(msg,'en').text
-    # msg = Translator().translate(msg,'en').text
+@tree.command(
+    name="img",
+    description="Gere uma imagem aleatória!",
+    guild=discord.Object(id=722857509659869204)
+)
+async def img(interaction:discord.Interaction,*,msg:str):
+     
     msg = msg.replace(" ","-")
     
     
@@ -295,113 +336,118 @@ async def img(ctx,*args):
         color=0x00ffff  # Cor do embed (verde)
     ) 
     embed.set_image(url=f"https://source.unsplash.com/400x300/?{msg}") 
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
     
-# @bot.event
-# async def on_message(message):
-#     if isinstance(message.channel, discord.DMChannel): 
-#         server = bot.get_guild(1046231965872967690)
-        
-#         channel = server.get_channel(1165027062545928243)
-        
-#         if server and channel: 
-#             await channel.send(f"{message.author}: {message.content}")
-#     await bot.process_commands(message) 
+ 
 
+async def connectVoice(interaction):
+    
+    if interaction.user.voice:  # verifica se o autor da mensagem está em um canal de voz
+        channel = interaction.user.voice.channel
 
-async def connectVoice(ctx):
-     if ctx.author.voice:  # verifica se o autor da mensagem está em um canal de voz
-            channel = ctx.author.voice.channel
+        # Se estiver conectado
+        if interaction.guild.voice_client is not None:
+            voice_channel = interaction.guild.voice_client
+        else:
+            voice_channel = await channel.connect() # aqui retorna esse erro: list index out of range
 
-            # Se estiver conectado
-            if ctx.voice_client is not None:
-                
-                # se não estiver tocando algo 
-                if(ctx.voice_client.is_playing() == False): 
-                    # await ctx.voice_client.disconnect() 
-                    print("Eis o criminoso")
-                voice_channel = ctx.voice_client
-            else:
+        return voice_channel
 
-                voice_channel = await channel.connect()
-
-            return voice_channel
-
-@bot.command()
-async def voice(ctx, *query):
-    try: 
+@tree.command(
+    name="voice",
+    description="Mande uma pergunte que te respondo na lábia! EU SABO",
+    guild=discord.Object(id=722857509659869204)
+)
+async def voice(interaction: discord.Interaction, *, query: str):
+    try:
         embed = discord.Embed(
-                    title=f" :yawning_face: **Essa eu sabo!**",
-                    description=f"Estou gankando para te ajudar ",
-                    color=0x032078  
-                )
-        await ctx.send(embed=embed)
-         
-        chatResp = generate_chatGPT(f"Resuma muito sua resposta: {' '.join(query)}") 
-        await text_to_speech(chatResp,'output_audio.mp3')
-
-
-        voice_channel = await connectVoice(ctx=ctx)
-        audio = discord.FFmpegPCMAudio(f'output_audio.mp3', executable='ffmpeg.exe')
- 
-        voice_channel.play(audio)
- 
-    except Exception as error:
-        await ctx.send(f"```{error}```")
-
-
-musicController = MusicController(bot)
-@bot.command(name="play",help='isso é algo incrivel')
-async def play(ctx, *url):
-    try:  
-        # await musicController.play(' '.join(url),ctx)
- 
-
-
-        # Conecta ao canal de voz solicitado
-        voice_channel = await connectVoice(ctx)
-     
-
-        video_search = VideosSearch(query=' '.join(url), limit=1)
-        results = video_search.result() 
-
-        if(len(results['result']) == 0):
-            emojis=[":dotted_line_face:",":face_with_raised_eyebrow:",":joy:",":star:",":face_with_monocle:",":interrobang:",":face_in_clouds:",":detective:",":smiling_imp:",":disguised_face:",":hot_face:",":fire:",":grimacing:",":shushing_face:"]
-            embed = discord.Embed(
-                title=f"{random.choice(emojis)} **Música não encotrada**",
-                description=f"Infelizmente não foi possível encontrar a sua música :musical_note: ",
-                color=0x032078  
-            )
-            await ctx.send(embed=embed)
-            return 
+            title=f" :yawning_face: **Essa eu sabo!**",
+            description=f"Estou gankando para te ajudar",
+            color=0x032078  
+        )
+        await interaction.response.send_message(embed=embed)
         
-        urlImplementada = results['result'][0]['link'] 
-  
-        await ctx.send(embed=embed_music(results['result'][0],ctx)) 
+        chatResp = await generate_chatGPT(f"Responda com gírias do League of Legends: {query}") 
+        text_to_speech(chatResp, './voices/output_audio.mp3')
 
-        if(ctx.voice_client is not None): 
-            if(ctx.voice_client.is_playing()): 
-                while ctx.voice_client.is_playing():
-                    await asyncio.sleep(1) 
-
-        youTube = YouTube(url=urlImplementada) 
-
-        audio_stream = youTube.streams.filter(only_audio=True).first().download(filename=f'{ctx.author.voice.channel.id}.mp3')
-
-        audio = discord.FFmpegPCMAudio(f'{ctx.author.voice.channel.id}.mp3')
-
-        # Reproduz o áudio no canal de voz
-        voice_channel.play(audio, after=lambda e: print('Aopa'))
-
-        while voice_channel.is_playing():
-            await asyncio.sleep(1)
-
-        await voice_channel.disconnect()
+        voice_channel = await connectVoice(interaction)
+        audio =  discord.FFmpegPCMAudio('./voices/output_audio.mp3') 
+        voice_channel.play(audio)
+         
+ 
     except Exception as error:
-        await ctx.send(f"```{error}```")
+        await interaction.followup.send(f"```{error}```")
+ 
+ 
+
+dj = Dj(bot=bot)
 
 
-def embed_music(data,ctx):
+@tree.command(
+    name="queue",
+    description="Fila de Músicas",
+    # guild=discord.Object(id=722857509659869204)
+    guilds=[discord.Object(id=722857509659869204),discord.Object(id=1046231965872967690)]
+) 
+async def queue(interaction: discord.Interaction):  
+    await dj.listarFilaMusica(interaction=interaction)
+
+
+@tree.command(
+    name="next",
+    description="Próxima música ",
+    guilds=[discord.Object(id=722857509659869204),discord.Object(id=1046231965872967690)]
+) 
+async def queue(interaction: discord.Interaction):  
+    await interaction.response.defer(ephemeral=False,thinking=True) 
+    await dj.nextMusic(interaction=interaction)
+    await interaction.followup.send("A próxima ta na fila ;)") 
+
+   
+@tree.command(
+    name="play",
+    description="E aí, vai uma musiquinha?",
+    # guild=discord.Object(id=722857509659869204)
+    guilds=[discord.Object(id=722857509659869204),discord.Object(id=1046231965872967690)]
+) 
+async def play(interaction: discord.Interaction, *, query: str):  
+    await dj.play(query=query,interaction=interaction) 
+
+@tree.command(
+    name="stop",
+    description="Ta bão, Chega, não vou aguentar mais não! para a música",
+    guild=discord.Object(id=722857509659869204)
+)
+async def stop(interaction: discord.Interaction):
+    await dj.stopMusic(interaction=interaction)
+ 
+  
+
+@tree.command(
+    name="pause",
+    description="Pause a música! (só não pode pausar kaan mary jane)",
+    guild=discord.Object(id=722857509659869204)
+)
+async def pause(interaction: discord.Interaction):
+    await dj.pauseMusic(interaction=interaction)
+   
+
+
+@tree.command(
+    name="resume",
+    description="Pause a música! (só não pode pausar kaan mary jane)",
+    guild=discord.Object(id=722857509659869204)
+)
+async def resume(interaction: discord.Interaction):
+    await dj.resumeMusic(interaction=interaction)
+ 
+
+
+
+
+
+
+def embed_music(data,inter):
     embed_music = discord.Embed(
             title=f"**{data['title']}**",
             description=f"**[{data['channel']['name']}]({data['channel']['link']})**",
@@ -413,20 +459,163 @@ def embed_music(data,ctx):
     embed_music.add_field(name="Publicado", value=f"{data['publishedTime']}", inline=True)
     embed_music.add_field(name="Duration", value=f"{data['duration']}", inline=True)
     embed_music.add_field(name="Views", value=f"{data['viewCount']['short']}", inline=True)
-    embed_music.add_field(name="Request", value=f"{ctx.author.mention}", inline=True)
+    embed_music.add_field(name="Request", value=f"{inter.mention}", inline=True)
     embed_music.add_field(name="Video", value=f"[Ir para Video]({data['link']})", inline=True)
 
     embed_music.set_footer(text=f"{data['descriptionSnippet'][0]['text']}", icon_url=f"{data['channel']['thumbnails'][0]['url']}")  
     
     return embed_music
 
-@bot.command()
-async def stop(ctx):
-    try: 
-        await ctx.voice_client.disconnect()  
-    except Exception as error:
-        await ctx.send(bot.channel, "```{error}```".format(error=error))
- 
 
-token = 'MTE2NTAxNjk5OTQ3NTMwMjUzMg.GIfPjC.fP_bsyJd1S_brISlvy-j6bMf6gK7nlwfJzBQug'
+@tree.command(
+    name="stroll",
+    description="Vamos Passear -sett",
+    guild=discord.Object(id=722857509659869204)
+) 
+async def stroll(interaction: discord.Interaction, *, user:discord.Member):
+
+    await interaction.response.defer(ephemeral=False,thinking=True)
+
+    if(user.name == "asatotexco" and interaction.user.name != "asatotexco"):
+        await interaction.followup.send("```Ta achando que é gente? 🤫```")
+        return
+    
+    rolesUser = [role.name for role in interaction.user.roles ] 
+    if("Turismólogo" not in rolesUser):
+        await interaction.followup.send("```Você não possui a HONRA para isso! 🤫```")
+        return
+    
+    await interaction.followup.send("```Sequestrando...```")
+ 
+    guild = interaction.guild
+    voice_channels = guild.voice_channels
+    voice_original = user.voice.channel
+
+    time_inicio = time.time()
+    min_castigo = 5  # minutes
+    delay_time =  5  # seconds
+    for c in voice_channels:
+        if(user.voice is None): 
+            if((time.time() - time_inicio) <= (min_castigo * 60)):
+                await asyncio.sleep(delay_time)
+                continue 
+            interaction.response.send_message("```O Usuário não está em um canal de voz```")
+            break
+        if(c != voice_original): 
+            try: 
+                await user.move_to(c)
+            except:
+                continue
+            await asyncio.sleep(0.01)
+
+    await user.move_to(voice_original) 
+    await interaction.followup.send("```Sequestrado com Sucesso!```") 
+
+@tree.command(
+    name="punish",
+    description="CAIA! - faz o alvo cair e ficar preso em uma chamada",
+    guild=discord.Object(id=722857509659869204)
+) 
+async def punish(interaction: discord.Interaction,*,alvo: discord.Member, minutes: int):
+     
+    await interaction.response.defer(ephemeral=False,thinking=True)   
+
+    if(alvo.name == "asatotexco" and interaction.user.name != "asatotexco"):
+        await interaction.followup.send("```Ta achando que é gente? 🤫```")
+        return
+     
+    
+    rolesUser = [role.name for role in interaction.user.roles ] 
+    if("SEQUESTRADOR 🐱\u200d👤" not in rolesUser):
+        await interaction.followup.send("```Você não possui a HONRA para isso! 🤫```")
+        return
+
+    minutes_punish =  minutes * 60  
+    prisao = bot.get_channel(1269379224129634434) 
+
+    await interaction.followup.send(f"{alvo.mention} foi detido por {minutes} minutos!")
+ 
+    if(alvo.voice is not None): 
+
+        voice_original = alvo.voice.channel
+        punishments[alvo] = voice_original
+
+        # Dando enquadro
+        voice_channel = alvo.voice.channel 
+         
+        if interaction.guild.voice_client is not None:
+            if(interaction.guild.voice_client.channel.id == alvo.voice.channel.id): 
+                voice_channel = interaction.guild.voice_client
+            else:
+                print("esta em canal diferente e o bot esta conectado na call")
+                try:  
+                    await interaction.guild.voice_client.disconnect()  
+                except Exception as error:
+                    await interaction.followup.send(f"```{error}```")
+
+                voice_channel = await voice_channel.connect()
+        else:
+            voice_channel = await voice_channel.connect() 
+
+        audio =  discord.FFmpegPCMAudio('./voices/sirene_grave.mp3')
+        voice_channel.play(audio) 
+        while voice_channel.is_playing():
+            await asyncio.sleep(0.1) 
+        audio2 =  discord.FFmpegPCMAudio('./voices/enquadro_bot.mp3')
+        voice_channel.play(audio2) 
+        while voice_channel.is_playing():
+            await asyncio.sleep(0.5) 
+
+    start = time.time() 
+
+    while (((time.time() - start) <= minutes_punish) and (alvo in punishments)):
+        if(alvo.voice is None):
+            continue
+        await alvo.move_to(prisao) 
+
+    if(alvo in punishments):
+        if(alvo.voice is not None):
+            await alvo.move_to(voice_original) 
+        del punishments[alvo]
+
+@tree.command(
+    name="free",
+    description="Liberte o prisioneiro",
+    guild=discord.Object(id=722857509659869204)
+) 
+async def free(interaction: discord.Interaction,*,alvo: discord.Member):
+
+    await interaction.response.defer(ephemeral=False,thinking=True) 
+
+    rolesUser = [role.name for role in interaction.user.roles ] 
+    if("SEQUESTRADOR 🐱\u200d👤" not in rolesUser):
+        await interaction.followup.send("```Você não possui a HONRA para isso! 🤫```")
+        return
+    
+    if(alvo in punishments):
+        await alvo.move_to(punishments[alvo]) 
+    del punishments[alvo]
+
+    await interaction.followup.send(f"{alvo.mention} foi liberto!") 
+
+
+@tree.command(
+    name="plagio",
+    description="Liberte o prisioneiro",
+    guild=discord.Object(id=722857509659869204)
+) 
+async def plagio(interaction: discord.Interaction,*, alvo: discord.Member):
+
+    await interaction.response.defer(ephemeral=False,thinking=True) 
+    embed = discord.Embed(  
+        title=f"Avatar de {alvo.name}",
+        description=alvo.mention,
+        color=0x00ffff,
+    )
+    embed.set_image(url=alvo.avatar) 
+
+    await interaction.followup.send(embed=embed) 
+
+ 
+token = 'MTE2NTAxNjk5OTQ3NTMwMjUzMg.GtdYCn.toerONW_I1qK3bS2ffyTAetMcDYcIuEXM9JVuk'
 bot.run(token=token) 
