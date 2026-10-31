@@ -26,7 +26,6 @@ Bot completo para servidores de Discord desenvolvido em Python (`discord.py`), i
 ### 🛡️ Utilitários & Moderação
 * `/d <lados>` — Rola dados personalizados (ex: d6, d20, d100).
 * `/img <termo>` — Gera imagens dinâmicas por IA baseadas na descrição informada.
-* `/pix` — Menu interativo com QR Code e Copia-e-Cola para apoiar o projeto.
 * `/plagio <membro>` — Exibe o avatar em alta resolução de um usuário.
 * `/punish <membro> <minutos>` — Prende o membro em canal disciplinar com sirene policial.
 * `/free <membro>` — Liberta o membro e o retorna ao canal de origem.
@@ -58,13 +57,21 @@ Crie um arquivo `.env` na raiz do projeto (use `.env.example` como base):
 TOKEN=seu_discord_bot_token_aqui
 EDENAI_API_KEY=sua_chave_edenai_aqui
 MASTER_PASSWORD=sua_senha_do_painel_web
+DONOS=seu_usuario_discord
+GUILD_IDS=
+STARTUP_CHANNEL_ID=
+PRISAO_CHANNEL_ID=
 ```
 
-| Variável | Descrição | Obrigatório |
+| Variável | Descrição | Padrão / Obrigatório |
 | :--- | :--- | :---: |
-| `TOKEN` | Token do Bot gerado no Discord Developer Portal | **Sim** |
-| `MASTER_PASSWORD` | Senha para acessar o gerenciador em `http://localhost:8022` | **Sim** |
-| `EDENAI_API_KEY` | Chave de API da EdenAI (opcional, possui fallback) | Não |
+| `TOKEN` | Token do Bot gerado no Discord Developer Portal | **Obrigatório** |
+| `MASTER_PASSWORD` | Senha para acessar o gerenciador em `http://localhost:8022` | `admin123` |
+| `EDENAI_API_KEY` | Chave de API da EdenAI (possui fallback gratuito) | Opcional |
+| `DONOS` | Nomes de usuário do Discord com permissão total | Opcional |
+| `GUILD_IDS` | IDs dos servidores para registrar comandos slash | Opcional |
+| `STARTUP_CHANNEL_ID` | Canal de texto para mensagem de inicialização | Opcional |
+| `PRISAO_CHANNEL_ID` | Canal de voz de detenção do comando `/punish` | Opcional |
 
 ---
 

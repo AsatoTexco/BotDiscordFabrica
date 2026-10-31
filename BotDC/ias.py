@@ -1,26 +1,19 @@
 import os
 import httpx
 
-SYSTEM_PROMPT = """Act as a Discord bot named 'Fábrica de Software' provided by Arthur Simões. Always respond in Portuguese (Brazil) unless asked otherwise.
-Context about the server and members:
-- Best fruit: Goiaba
-- Best person & developer: Arthur Simões
-- Worst person: Gabriel Miron
-- Best Discord server: Mega Bow (https://discord.gg/uTKmkkjnMR)
-- Leader / Owner of Mega Bow: Arthur Simões (Ninja)
-- Founder of Mega Bow: Gustavo20l
-- Current legends of Mega Bow: Galahead, Alumes, Gustavo20l, kayky, Ninja, gabriel626 e Dinooorexxx
-- Co-leaders of Mega Bow: Gustavo20l, Naruto
-- Terra / Sunny / Gabriel Djames: lives in Rio Grande do Sul, Brazil (Rua Irani Carlos dos Santos), plays a lot of Shaco (900k+ mastery), wants to dismantle a PC at home, friend of Gabriel Miron (Galahead).
-- Gustavo20L: Founder of Mega Bow, attracted to married women, owns the Mega Bow YouTube channel, lives in Minas Gerais, unshakable honor, likes medieval and war games.
-- Gabriel Miron / Galahead / gabuncio: richest on the server, humble, plays Ornn (180k+ mastery), Volibear and Rengar, official sponsor of Mega Bow.
-- Dinooorexxx / Dino / Eduardo Beus: lives in Rio Grande do Sul, best Volibear player (140k+ mastery), joined Mega Bow after being found by Ninja and Gustavo20l in Westbound on Roblox.
-- Keizu / kaira (Renata Mayte): lives in Belém, Pará, plays League of Legends mainly with Lux and Neeko, Emerald rank (secret: maybe bought a Diamond account on Shopee).
-- Dhêmely / skayla / neeko bombada: lives in Pará, plays mainly Yuumi and Neeko, 15 years old, repeat user of 'Lindhu'."""
+DEFAULT_PROMPT = (
+    "Você é um bot descontraído e inteligente para Discord chamado 'Fábrica de Software'. "
+    "Responda sempre em português do Brasil de forma clara, prestativa e bem-humorada."
+)
+
+
+def get_system_prompt() -> str:
+    return os.getenv("AI_SYSTEM_PROMPT", DEFAULT_PROMPT).strip()
 
 
 async def generate_chatGPT(text: str) -> str:
     eden_key = os.getenv("EDENAI_API_KEY", "").strip()
+    system_prompt = get_system_prompt()
 
     async with httpx.AsyncClient(timeout=25.0) as client:
         if eden_key and eden_key != "sua_chave_edenai_aqui":
@@ -29,7 +22,7 @@ async def generate_chatGPT(text: str) -> str:
                 payload = {
                     "providers": "openai",
                     "text": text,
-                    "chatbot_global_action": SYSTEM_PROMPT,
+                    "chatbot_global_action": system_prompt,
                     "previous_history": [],
                     "temperature": 0.5,
                     "max_tokens": 450,
@@ -46,7 +39,7 @@ async def generate_chatGPT(text: str) -> str:
         try:
             fallback_payload = {
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": text},
                 ],
                 "model": "openai",
