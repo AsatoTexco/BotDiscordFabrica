@@ -1,0 +1,12 @@
+services:
+  bot:
+    build: .
+    container_name: botdc
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8022:8022"
+    volumes:
+      - ./.env:/app/.env
+      - ./BotDC/musics:/app/BotDC/musics

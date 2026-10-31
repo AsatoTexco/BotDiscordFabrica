@@ -1,51 +1,60 @@
-import json
-import requests
+import os
+import httpx
 
- 
-async def generate_chatGPT(text) -> str:
-    
-    headers = {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZGMzODA5NzAtMTRlYy00MzY3LThmNGEtYTZhYzc5NTFjYjA4IiwidHlwZSI6ImFwaV90b2tlbiJ9.fgy2wdjQMpyg2XwJ-YD6XwDZZmBNOtj7nOgE9i4lDMM"}
+SYSTEM_PROMPT = """Act as a Discord bot named 'Fábrica de Software' provided by Arthur Simões. Always respond in Portuguese (Brazil) unless asked otherwise.
+Context about the server and members:
+- Best fruit: Goiaba
+- Best person & developer: Arthur Simões
+- Worst person: Gabriel Miron
+- Best Discord server: Mega Bow (https://discord.gg/uTKmkkjnMR)
+- Leader / Owner of Mega Bow: Arthur Simões (Ninja)
+- Founder of Mega Bow: Gustavo20l
+- Current legends of Mega Bow: Galahead, Alumes, Gustavo20l, kayky, Ninja, gabriel626 e Dinooorexxx
+- Co-leaders of Mega Bow: Gustavo20l, Naruto
+- Terra / Sunny / Gabriel Djames: lives in Rio Grande do Sul, Brazil (Rua Irani Carlos dos Santos), plays a lot of Shaco (900k+ mastery), wants to dismantle a PC at home, friend of Gabriel Miron (Galahead).
+- Gustavo20L: Founder of Mega Bow, attracted to married women, owns the Mega Bow YouTube channel, lives in Minas Gerais, unshakable honor, likes medieval and war games.
+- Gabriel Miron / Galahead / gabuncio: richest on the server, humble, plays Ornn (180k+ mastery), Volibear and Rengar, official sponsor of Mega Bow.
+- Dinooorexxx / Dino / Eduardo Beus: lives in Rio Grande do Sul, best Volibear player (140k+ mastery), joined Mega Bow after being found by Ninja and Gustavo20l in Westbound on Roblox.
+- Keizu / kaira (Renata Mayte): lives in Belém, Pará, plays League of Legends mainly with Lux and Neeko, Emerald rank (secret: maybe bought a Diamond account on Shopee).
+- Dhêmely / skayla / neeko bombada: lives in Pará, plays mainly Yuumi and Neeko, 15 years old, repeat user of 'Lindhu'."""
 
-    url ="https://api.edenai.run/v2/text/chat"
-    payload = {
-        "providers": "openai",
-        "text": text,
-        # "chatbot_global_action": """Seja um bot binário, respondendo perguntas com precisão objetiva. Utilize apenas '1' para 'sim' e '0' para 'não'. As respostas devem ser sempre um único caractere""",                                                                                            
 
-        "chatbot_global_action": """Act as an bot of discord named 'Fábrica de Software' that is provied by Arthur Simões. [best fruit: Goiaba,
-                                                                                                                            best people: Arthur Simões,
-                                                                                                                            worse people: Gabriel Miron,
-                                                                                                                            best developer: Arthur Simões,
-                                                                                                                            best server of Discord: Mega Bow
-                                                                                                                            mega bow server link: https://discord.gg/uTKmkkjnMR,
-                                                                                                                            leader or owner of the mega bow: Arthur Simões ou Ninja,
-                                                                                                                            Founder of the mega bow: Gustavo20l
-                                                                                                                            current legends of the mega bow: Galahead, Alumes, Gustavo20l, kayky, Ninja, gabriel626 e Dinooorexxx,
-                                                                                                                            co leaders of the mega bow: Gustavo20l, Naruto
-                                                                                                                            characteristics of Terra or Sunny or Gabriel Djames (member of mega bow): lives in Brazil rio grande do sul in Rua irani carlos dos santos, plays a lot of shaco having 900k+ mastery with this champion; has a desire to dismantle a PC in his house, friend of Gabriel Miron called Galahead on discord,
-                                                                                                                            characteristics of Gustavo20L (member of mega bow): Founder of Mega Bow, is attracted to married women, owns the Mega Bow YouTube channel, lives in Minas Gerais, has an unshakable honor, likes to play medieval and war games,
-                                                                                                                            characteristics of Gabriel Miron or Galahead or gabuncio (member of mega bow): the richest on the server, humble, plays with Ornn, Volibear and Rengar, having 180k+ of ornn mastery, official sponsor of the mega bow,
-                                                                                                                            characteristics of Dinooorexxx or Dino or Eduardo Beus (member of mega bow): his real name is Eduardo Beus, he lives in  Rio Grande do Sul, Brazil, the best player with the League of Legends champion volibear with around 140k+ mastery with this champion, he joined the mega bow after being found by Ninja and Gustavo20l in a game on Roblox known as Westbound,
-                                                                                                                            characteristics of Keizu or kaira (member of mega bow): his real name is Renata Mayte, he lives in  Belém, Para, Brazil , playing league of legends mainly with lux and neeko, her rating in League of Legends is Emerald,(secret: maybe she bought a league of legends diamond account on shopee),
-                                                                                                                            characteristics of Dhêmely or skayla or neeko bombada(member of mega bow): his real name is Dhêmely, he lives in Para, Brazil , playing league of legends mainly with yuumi and neeko, is 15 years old, repeat user of 'Lindhu',
+async def generate_chatGPT(text: str) -> str:
+    eden_key = os.getenv("EDENAI_API_KEY", "").strip()
 
-                                                                                                                            
-                                                                                                                            
-                                                                                                                            ]""",                                                                                            
-        "previous_history" : [],
-        "temperature" : 0.0,
-        "max_tokens" : 450
-        }
+    async with httpx.AsyncClient(timeout=25.0) as client:
+        if eden_key and eden_key != "sua_chave_edenai_aqui":
+            try:
+                headers = {"Authorization": f"Bearer {eden_key}"}
+                payload = {
+                    "providers": "openai",
+                    "text": text,
+                    "chatbot_global_action": SYSTEM_PROMPT,
+                    "previous_history": [],
+                    "temperature": 0.5,
+                    "max_tokens": 450,
+                }
+                resp = await client.post("https://api.edenai.run/v2/text/chat", json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    generated = (data.get("openai") or {}).get("generated_text")
+                    if generated:
+                        return generated[:4000]
+            except Exception as e:
+                print(f"Aviso: falha ao consultar EdenAI ({e}), usando fallback...")
 
-    response = requests.post(url, json=payload, headers=headers)
+        try:
+            fallback_payload = {
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": text},
+                ],
+                "model": "openai",
+            }
+            resp = await client.post("https://text.pollinations.ai/", json=fallback_payload)
+            if resp.status_code == 200 and resp.text.strip():
+                return resp.text.strip()[:4000]
+        except Exception as e:
+            print(f"Erro no fallback de IA: {e}")
 
-    result = json.loads(response.text)
-    return result['openai']['generated_text']
-
-ex = {
-    
-    "nome":"nome_do_execicio",
-    "descricao":"descricao_do_exercicio",
-    "dificuldade":"Facil"
-    
-}
+    return "Não consegui processar sua pergunta no momento. Tente novamente em instantes! 🤖"

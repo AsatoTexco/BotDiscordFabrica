@@ -1,51 +1,73 @@
 import discord
 
 
-def embed_music(data,inter):
-    embed_music = discord.Embed(
-            title=f"**{data['title']}**",
-            description=f"**[{data['channel']['name']}]({data['channel']['link']})**",
-            color=0x00ffff
-    )  
-    embed_music.set_image(url=data['thumbnails'][-1]['url'])
-    embed_music.set_thumbnail(url=f"{data['channel']['thumbnails'][0]['url']}")
-    embed_music.add_field(name="Publicado", value=f"{data['publishedTime']}", inline=True)
-    embed_music.add_field(name="Duration", value=f"{data['duration']}", inline=True)
-    embed_music.add_field(name="Views", value=f"{data['viewCount']['short']}", inline=True)
-    embed_music.add_field(name="Request", value=f"{inter.user.mention}", inline=True)
-    embed_music.add_field(name="Video", value=f"[Ir para Video]({data['link']})", inline=True)
+def embed_music(data: dict, inter: discord.Interaction) -> discord.Embed:
+    title = data.get("title", "Música")
+    channel_info = data.get("channel") or {}
+    channel_name = channel_info.get("name", "YouTube")
+    channel_link = channel_info.get("link", data.get("link", "https://youtube.com"))
 
-    if (data.get('descriptionSnippet') and len(data['descriptionSnippet']) > 0 and     data['descriptionSnippet'][0].get('text') and data.get('channel') and data['channel'].get('thumbnails') and len(data['channel']['thumbnails']) > 0 and data['channel']['thumbnails'][0].get('url')):
+    embed = discord.Embed(
+        title=f"**{title}**",
+        description=f"**[{channel_name}]({channel_link})**",
+        color=0x00FFFF,
+    )
 
-        embed_music.set_footer(
-            text=f"{data['descriptionSnippet'][0]['text']}", 
-            icon_url=f"{data['channel']['thumbnails'][0]['url']}"
+    thumbnails = data.get("thumbnails") or []
+    if thumbnails and thumbnails[-1].get("url"):
+        embed.set_image(url=thumbnails[-1]["url"])
+
+    channel_thumbs = channel_info.get("thumbnails") or []
+    channel_thumb_url = channel_thumbs[0].get("url") if channel_thumbs else None
+    if channel_thumb_url:
+        embed.set_thumbnail(url=channel_thumb_url)
+
+    embed.add_field(name="Publicado", value=str(data.get("publishedTime", "N/A")), inline=True)
+    embed.add_field(name="Duration", value=str(data.get("duration", "N/A")), inline=True)
+    view_short = (data.get("viewCount") or {}).get("short", "N/A")
+    embed.add_field(name="Views", value=str(view_short), inline=True)
+    embed.add_field(name="Request", value=f"{inter.user.mention}", inline=True)
+    embed.add_field(name="Video", value=f"[Ir para Video]({data.get('link', 'https://youtube.com')})", inline=True)
+
+    snippets = data.get("descriptionSnippet") or []
+    snippet_text = snippets[0].get("text") if snippets and isinstance(snippets[0], dict) else None
+    if snippet_text:
+        embed.set_footer(
+            text=snippet_text[:200],
+            icon_url=channel_thumb_url,
         )
-    # embed_music.set_footer(text=f"{data['descriptionSnippet'][0]['text']}", icon_url=f"{data['channel']['thumbnails'][0]['url']}")  
-    
-    return embed_music
 
-def embedListaMusics(listMusics, atual:int, inter:discord.Interaction):
-    embed_lista = discord.Embed(
-        title="Fila de Músicas",
-        color=0x00ffff
-    ) 
-    strListMusics = ""
-    for i in range(len(listMusics)):
-        if(i == atual):
-            strListMusics = strListMusics + "\n" + f":arrow_forward: **{i+1}° - {listMusics[i]}** :arrow_backward:"
+    return embed
+
+
+def embedListaMusics(listMusics, atual: int, inter: discord.Interaction) -> discord.Embed:
+    lines = []
+    for i, item in enumerate(listMusics):
+        label = item.get("title", item.get("query", str(item))) if isinstance(item, dict) else str(item)
+        if i == atual:
+            lines.append(f":arrow_forward: **{i + 1}° - {label}** :arrow_backward:")
         else:
-            strListMusics = strListMusics + "\n" + f"{i+1}° - {listMusics[i]}"
-    embed_lista.add_field(name="Lista",value=f"{strListMusics}")
+            lines.append(f"{i + 1}° - {label}")
+
+    str_list = "\n".join(lines) if lines else "Nenhuma música na fila."
+    if len(str_list) > 4000:
+        str_list = str_list[:3997] + "..."
+
+    embed_lista = discord.Embed(
+        title="🎵 Fila de Músicas",
+        description=str_list,
+        color=0x00FFFF,
+    )
     return embed_lista
 
-def generateViewMusic(c1,c2,c3,c4,c5,c6):
-    button1 = discord.ui.Button(style=discord.ButtonStyle.green,    label="◀")
-    button2 = discord.ui.Button(style=discord.ButtonStyle.primary,  label="⏹")
-    button3 = discord.ui.Button(style=discord.ButtonStyle.primary , label="⏺")
-    button4 = discord.ui.Button(style=discord.ButtonStyle.green ,   label="▶")
-    button5 = discord.ui.Button(style=discord.ButtonStyle.red ,   label="❌")
-    button6 = discord.ui.Button(style=discord.ButtonStyle.grey,    label="💠")
+
+def generateViewMusic(c1, c2, c3, c4, c5, c6) -> discord.ui.View:
+    button1 = discord.ui.Button(style=discord.ButtonStyle.green, label="◀")
+    button2 = discord.ui.Button(style=discord.ButtonStyle.primary, label="⏸")
+    button3 = discord.ui.Button(style=discord.ButtonStyle.primary, label="▶")
+    button4 = discord.ui.Button(style=discord.ButtonStyle.green, label="⏭")
+    button5 = discord.ui.Button(style=discord.ButtonStyle.red, label="⏹")
+    button6 = discord.ui.Button(style=discord.ButtonStyle.grey, label="💠")
 
     button1.callback = c1
     button2.callback = c2
@@ -54,7 +76,7 @@ def generateViewMusic(c1,c2,c3,c4,c5,c6):
     button5.callback = c5
     button6.callback = c6
 
-    view = discord.ui.View()
+    view = discord.ui.View(timeout=None)
     view.add_item(button6)
     view.add_item(button1)
     view.add_item(button2)
@@ -63,19 +85,30 @@ def generateViewMusic(c1,c2,c3,c4,c5,c6):
     view.add_item(button5)
     return view
 
-def previewMusic(data):
 
-    embed_music = discord.Embed(
-            title=f"**{data['title']}**",
-            description=f"**Música adicionada à Lista de Músicas**",
-            color=0x00ffff
-    )  
-     
-    embed_music.set_thumbnail(url=f"{data['channel']['thumbnails'][0]['url']}")    
-    embed_music.add_field(name="Video", value=f"[Ir para Video]({data['link']})", inline=True)
+def previewMusic(data: dict) -> discord.Embed:
+    title = data.get("title", "Música")
+    embed = discord.Embed(
+        title=f"**{title}**",
+        description="**Música adicionada à Lista de Músicas**",
+        color=0x00FFFF,
+    )
 
-    if(data['descriptionSnippet'] is not None and data['channel']['thumbnails'] is not None):
-        if(data['descriptionSnippet'][0]['text'] is not None and data['channel']['thumbnails'][0]['url'] is not None):
-            embed_music.set_footer(text=f"{data['descriptionSnippet'][0]['text']}", icon_url=f"{data['channel']['thumbnails'][0]['url']}")  
-    
-    return embed_music
+    channel_info = data.get("channel") or {}
+    channel_thumbs = channel_info.get("thumbnails") or []
+    channel_thumb_url = channel_thumbs[0].get("url") if channel_thumbs else None
+    if not channel_thumb_url:
+        thumbs = data.get("thumbnails") or []
+        channel_thumb_url = thumbs[-1].get("url") if thumbs else None
+
+    if channel_thumb_url:
+        embed.set_thumbnail(url=channel_thumb_url)
+
+    embed.add_field(name="Video", value=f"[Ir para Video]({data.get('link', 'https://youtube.com')})", inline=True)
+
+    snippets = data.get("descriptionSnippet") or []
+    snippet_text = snippets[0].get("text") if snippets and isinstance(snippets[0], dict) else None
+    if snippet_text:
+        embed.set_footer(text=snippet_text[:200], icon_url=channel_thumb_url)
+
+    return embed

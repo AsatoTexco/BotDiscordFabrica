@@ -1,2 +1,24 @@
-/BotDC/__pycache__
+# Ambiente e Segredos
 .env
+BotDC/.env
+BotDC/passwords.json
+
+# Cache e Build do Python
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.spec
+pyvenv.cfg
+.venv/
+venv/
+env/
+
+# Arquivos gerados em execução
+BotDC/musics/
+output_audio.mp3
+BotDC/voices/output_audio.mp3
+*.zip
+*.exe
+*.bkp.txt

@@ -1,14 +1,16 @@
-from Models.Dj import Dj
+import os
 import discord
+from dotenv import load_dotenv
+from Models.Dj import Dj
 
+load_dotenv()
 
 intents = discord.Intents.default()
-intents.message_content = True  # Configurar a intenção como True
+intents.message_content = True
 bot = discord.Client(intents=intents)
- 
-
 dj = Dj(bot)
 
-
-token = 'MTE2NTAxNjk5OTQ3NTMwMjUzMg.GtdYCn.toerONW_I1qK3bS2ffyTAetMcDYcIuEXM9JVuk'
-bot.run(token=token)
+if __name__ == "__main__":
+    token = os.getenv("TOKEN")
+    if token:
+        bot.run(token=token)
