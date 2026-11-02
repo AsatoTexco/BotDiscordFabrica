@@ -390,46 +390,53 @@ async def executar_punish(
     minutes: int = 1,
     reverso: bool = False,
     alvo_protegido: discord.Member | None = None,
+    anunciar: bool = True,
 ):
     if not interaction.guild or not isinstance(alvo, discord.Member):
-        await interaction.followup.send("```Este comando só pode ser utilizado dentro de um servidor.```")
+        if anunciar:
+            await interaction.followup.send("```Este comando só pode ser utilizado dentro de um servidor.```")
         return
 
     if not reverso and minutes < 1:
-        await interaction.followup.send("```O tempo de punição deve ser de pelo menos 1 minuto.```")
+        if anunciar:
+            await interaction.followup.send("```O tempo de punição deve ser de pelo menos 1 minuto.```")
         return
 
     minutes = max(1, minutes)
 
     if alvo.voice is None or alvo.voice.channel is None:
-        if reverso and alvo_protegido is not None:
-            await interaction.followup.send(
-                f"🔄 **Feitiço virou contra o feiticeiro!** {alvo.mention} tentou usar o comando em {alvo_protegido.mention}, mas não está em um canal de voz para ser preso!"
-            )
-        else:
-            await interaction.followup.send("```O usuário não está em um canal de voz!```")
+        if anunciar:
+            if reverso and alvo_protegido is not None:
+                await interaction.followup.send(
+                    f"🔄 **Feitiço virou contra o feiticeiro!** {alvo.mention} tentou usar o comando em {alvo_protegido.mention}, mas não está em um canal de voz para ser preso!"
+                )
+            else:
+                await interaction.followup.send("```O usuário não está em um canal de voz!```")
         return
 
     minutes_punish = min(minutes, 60) * 60
     prisao_id = get_prisao_channel_id()
     if not prisao_id:
-        await interaction.followup.send("```Canal de prisão não configurado. Defina PRISAO_CHANNEL_ID no .env.```")
+        if anunciar:
+            await interaction.followup.send("```Canal de prisão não configurado. Defina PRISAO_CHANNEL_ID no .env.```")
         return
 
     prisao = interaction.guild.get_channel(prisao_id) or bot.get_channel(prisao_id)
     if prisao is None:
-        await interaction.followup.send("```Canal de prisão não encontrado no servidor.```")
+        if anunciar:
+            await interaction.followup.send("```Canal de prisão não encontrado no servidor.```")
         return
 
     voice_original = alvo.voice.channel if (alvo.voice and alvo.voice.channel) else None
     punishments[alvo.id] = voice_original
 
-    if reverso and alvo_protegido is not None:
-        await interaction.followup.send(
-            f"🔄 **Feitiço virou contra o feiticeiro!** {alvo.mention} tentou sequestrar {alvo_protegido.mention} e foi detido por {minutes} minuto(s)! 🚨"
-        )
-    else:
-        await interaction.followup.send(f"🚨 {alvo.mention} foi detido por {minutes} minuto(s)!")
+    if anunciar:
+        if reverso and alvo_protegido is not None:
+            await interaction.followup.send(
+                f"🔄 **Feitiço virou contra o feiticeiro!** {alvo.mention} tentou sequestrar {alvo_protegido.mention} e foi detido por {minutes} minuto(s)! 🚨"
+            )
+        else:
+            await interaction.followup.send(f"🚨 {alvo.mention} foi detido por {minutes} minuto(s)!")
 
     if voice_original is not None:
         try:
@@ -697,13 +704,42 @@ async def tribunal(interaction: discord.Interaction, acusado: discord.Member, cr
     condenado = votos_culpado > votos_inocente
 
     resultado_str = "CULPADO" if condenado else "INOCENTE"
-    sentenca = await generate_chatGPT(
-        f"Aja como um juiz debochado e dê uma sentença de 1 frase curta declarando {acusado.display_name} {resultado_str} pelo crime: {crime}"
-    )
+    if condenado:
+        frases_fallback = [
+            f"O júri popular não perdoou! {acusado.display_name} foi declarado culpado por '{crime}' e vai direto para a solitária refletir sobre seus atos!",
+            f"Bateu o martelo! As provas de '{crime}' são irrefutáveis: {acusado.display_name}, teje preso imediatamente!",
+            f"Sem direito a fiança! Por '{crime}', {acusado.display_name} está condenado a 1 minuto no xilindró do servidor!",
+        ]
+        prompt_juiz = (
+            f"Em um minigame fictício e bem-humorado de RPG entre amigos no Discord, escreva apenas 1 frase curta e engraçada "
+            f"de um juiz teatral anunciando que o personagem '{acusado.display_name}' perdeu a votação pelo motivo '{crime}' e vai para o cantinho do castigo."
+        )
+        pena_txt = (
+            f"\n🔒 **Pena:** {acusado.mention} foi detido por **1 minuto**!"
+            if (acusado.voice and acusado.voice.channel)
+            else f"\n🔒 **Pena:** Condenado, mas escapou da viatura por não estar em um canal de voz!"
+        )
+    else:
+        frases_fallback = [
+            f"Por falta de provas (ou pura sorte), {acusado.display_name} foi absolvido da acusação de '{crime}' e segue livre!",
+            f"O tribunal falou! {acusado.display_name} foi declarado inocente de '{crime}' e está liberado!",
+            f"Caso encerrado! O júri perdoou {acusado.display_name} por '{crime}' desta vez!",
+        ]
+        prompt_juiz = (
+            f"Em um minigame fictício e bem-humorado de RPG entre amigos no Discord, escreva apenas 1 frase curta e engraçada "
+            f"de um juiz teatral anunciando que o personagem '{acusado.display_name}' foi absolvido na brincadeira sobre '{crime}'."
+        )
+        pena_txt = f"\n🕊️ **Resultado:** {acusado.mention} está livre!"
+
+    sentenca = await generate_chatGPT(prompt_juiz, fallback=random.choice(frases_fallback))
 
     veredito_embed = discord.Embed(
         title=f"👨‍⚖️ Veredito Final: {resultado_str}!",
-        description=f"*{sentenca}*\n\n🚨 **Culpado:** {votos_culpado} voto(s) | ✅ **Inocente:** {votos_inocente} voto(s)",
+        description=(
+            f"🗣️ *\"{sentenca}\"*\n\n"
+            f"🚨 **Culpado:** {votos_culpado} voto(s) | ✅ **Inocente:** {votos_inocente} voto(s)"
+            f"{pena_txt}"
+        ),
         color=0xEF4444 if condenado else 0x10B981,
     )
     await interaction.followup.send(embed=veredito_embed)
@@ -717,7 +753,7 @@ async def tribunal(interaction: discord.Interaction, acusado: discord.Member, cr
         await falar_no_canal(interaction.guild, canal_voz, sentenca)
 
     if condenado:
-        await executar_punish(interaction, acusado, minutes=1, reverso=False)
+        await executar_punish(interaction, acusado, minutes=1, reverso=False, anunciar=False)
 
 
 @tree.command(name="roleta", description="Roleta russa entre os membros do seu canal de voz!")
@@ -748,24 +784,160 @@ async def roleta(interaction: discord.Interaction):
         await executar_stroll_rapido(interaction.guild, sorteado)
     else:
         await interaction.followup.send(
-            f"💥 **BANG!** Tirou `{giro}/6`! {sorteado.mention} perdeu na roleta russa e vai direto para a prisão!"
+            f"💥 **BANG!** Tirou `{giro}/6`! {sorteado.mention} perdeu na roleta russa e foi detido por 1 minuto! 🚨"
         )
-        await executar_punish(interaction, sorteado, minutes=1, reverso=False)
+        await executar_punish(interaction, sorteado, minutes=1, reverso=False, anunciar=False)
 
 
-@tree.command(name="roast", description="A IA cria uma zoeira para o alvo e fala no canal de voz!")
+async def coletar_dossie_usuario(interaction: discord.Interaction, membro: discord.Member) -> dict:
+    mensagens: list[str] = []
+    canais_vistos: set[int] = set()
+
+    canais_busca = []
+    if interaction.channel and hasattr(interaction.channel, "history"):
+        canais_busca.append(interaction.channel)
+    if interaction.guild:
+        for ch in interaction.guild.text_channels:
+            if ch not in canais_busca:
+                canais_busca.append(ch)
+
+    for ch in canais_busca[:10]:
+        if len(mensagens) >= 50:
+            break
+        if ch.id in canais_vistos:
+            continue
+        canais_vistos.add(ch.id)
+        try:
+            if interaction.guild and interaction.guild.me:
+                perms = ch.permissions_for(interaction.guild.me)
+                if not (perms.view_channel and perms.read_message_history):
+                    continue
+            async for msg in ch.history(limit=150):
+                if msg.author.id == membro.id and msg.content and msg.content.strip():
+                    mensagens.append(msg.content.strip()[:120])
+                    if len(mensagens) >= 50:
+                        break
+        except Exception:
+            continue
+
+    cargos = [
+        r.name for r in reversed(getattr(membro, "roles", []))
+        if r.name != "@everyone"
+    ]
+
+    atividades = []
+    for act in getattr(membro, "activities", []) or []:
+        try:
+            if isinstance(act, discord.Spotify):
+                atividades.append(f"Ouvindo no Spotify: {act.title} - {act.artist}")
+            elif isinstance(act, discord.Streaming):
+                atividades.append(f"Em live ({ getattr(act, 'platform', 'Stream') }): {act.name}")
+            elif isinstance(act, discord.Game):
+                atividades.append(f"Jogando: {act.name}")
+            elif getattr(act, "name", None):
+                detalhe = f" ({act.details})" if getattr(act, "details", None) else ""
+                estado = f" [{act.state}]" if getattr(act, "state", None) else ""
+                atividades.append(f"{act.name}{detalhe}{estado}")
+        except Exception:
+            continue
+
+    badges = []
+    try:
+        if hasattr(membro, "public_flags"):
+            for flag_name, val in membro.public_flags:
+                if val:
+                    badges.append(flag_name.replace("_", " ").title())
+    except Exception:
+        pass
+
+    if membro.voice and membro.voice.channel:
+        estados_call = []
+        if membro.voice.self_mute or membro.voice.mute:
+            estados_call.append("mutado")
+        if membro.voice.self_deaf or membro.voice.deaf:
+            estados_call.append("surdo/deaf")
+        if membro.voice.self_stream:
+            estados_call.append("transmitindo tela")
+        if membro.voice.self_video:
+            estados_call.append("com câmera ligada")
+        extra_call = f" ({', '.join(estados_call)})" if estados_call else " (microfone aberto)"
+        info_call = f"Na call '{membro.voice.channel.name}'{extra_call}"
+    else:
+        info_call = "Fora de qualquer canal de voz"
+
+    criado_em = membro.created_at.strftime("%d/%m/%Y") if getattr(membro, "created_at", None) else "Desconhecido"
+    entrou_em = membro.joined_at.strftime("%d/%m/%Y") if getattr(membro, "joined_at", None) else "Desconhecido"
+    apelido = membro.nick if getattr(membro, "nick", None) else "Sem apelido (usa o nome padrão)"
+
+    return {
+        "username": membro.name,
+        "display_name": membro.display_name,
+        "global_name": getattr(membro, "global_name", None) or membro.name,
+        "apelido": apelido,
+        "cargos": cargos,
+        "atividades": atividades,
+        "badges": badges,
+        "info_call": info_call,
+        "criado_em": criado_em,
+        "entrou_em": entrou_em,
+        "mensagens": mensagens,
+    }
+
+
+@tree.command(name="roast", description="Analisa perfil, cargos e últimas 50 mensagens do alvo para criar um roast completo!")
 async def roast(interaction: discord.Interaction, alvo: discord.Member):
     await interaction.response.defer(ephemeral=False, thinking=True)
 
-    alvo_real = interaction.user if is_protected_user(alvo) else alvo
-    zoeira = await generate_chatGPT(
-        f"Faça uma zoeira curta, engraçada e criativa de 1 ou 2 frases zoando o amigo {alvo_real.display_name} no Discord."
+    reverso = is_protected_user(alvo)
+    alvo_real = interaction.user if reverso else alvo
+    dossie = await coletar_dossie_usuario(interaction, alvo_real)
+
+    cargos_str = ", ".join(dossie["cargos"][:10]) if dossie["cargos"] else "Nenhum cargo relevante (membro comum)"
+    apps_str = " | ".join(dossie["atividades"]) if dossie["atividades"] else "Nenhuma atividade/app visível no status"
+    badges_str = ", ".join(dossie["badges"]) if dossie["badges"] else "Nenhuma insígnia especial"
+    amostra_msgs = " / ".join(f'"{m}"' for m in dossie["mensagens"][:25]) if dossie["mensagens"] else "Nenhuma mensagem recente encontrada (fantasma do servidor)"
+
+    msg_exemplo = f'"{dossie["mensagens"][0]}"' if dossie["mensagens"] else "absolutamente nada porque vive escondido"
+    cargo_destaque = dossie["cargos"][0] if dossie["cargos"] else "sem cargo nenhum"
+    fallback_roast = (
+        f"Olha a situação de **{dossie['display_name']}** (`@{dossie['username']}`): entrou no servidor em {dossie['entrou_em']}, "
+        f"ostenta o cargo de *{cargo_destaque}* só de enfeite e está {dossie['info_call'].lower()}. "
+        f"Vasculhei {len(dossie['mensagens'])} mensagens recentes e a maior pérola que conseguiu produzir foi {msg_exemplo}!"
     )
 
+    prompt_roast = (
+        "Em uma brincadeira de stand-up comedy / roast amigável entre amigos de um servidor de Discord, "
+        "faça uma análise irônica, engraçada, afiada e criativa (em 1 parágrafo de 3 a 5 frases) zoando este perfil com base nos dados reais abaixo:\n"
+        f"- Nome/Nick: {dossie['display_name']} (username: @{dossie['username']}, apelido: {dossie['apelido']})\n"
+        f"- Conta criada em: {dossie['criado_em']} | Entrou no servidor em: {dossie['entrou_em']}\n"
+        f"- Cargos no servidor: {cargos_str}\n"
+        f"- Status na chamada de voz: {dossie['info_call']}\n"
+        f"- Jogos/Apps/Status conectados em execução: {apps_str}\n"
+        f"- Badges do perfil: {badges_str}\n"
+        f"- Total de mensagens analisadas: {len(dossie['mensagens'])}/50\n"
+        f"- Últimas mensagens reais que mandou no servidor: {amostra_msgs}\n"
+        "Cite diretamente os cargos, o jeito que escreve nas mensagens ou o status dele de forma muito bem-humorada!"
+    )
+
+    zoeira = await generate_chatGPT(prompt_roast, fallback=fallback_roast)
+
+    aviso_reverso = f"🔄 *Tentou zoar {alvo.mention}, então a análise virou contra você!*\n\n" if reverso else ""
     embed = discord.Embed(
-        title=f"🔥 Roast para {alvo_real.display_name}",
-        description=zoeira[:4000],
+        title=f"🔥 Raio-X & Roast Completo: {dossie['display_name']}",
+        description=f"{aviso_reverso}{zoeira[:3500]}",
         color=0xEF4444,
+    )
+    embed.set_thumbnail(url=alvo_real.display_avatar.url)
+    embed.add_field(
+        name="📊 Dossiê Vasculhado",
+        value=(
+            f"• **Usuário:** `{dossie['username']}` (Desde {dossie['entrou_em']} no servidor)\n"
+            f"• **Cargos ({len(dossie['cargos'])}):** {cargos_str[:300]}\n"
+            f"• **Call:** {dossie['info_call']}\n"
+            f"• **Apps / Status:** {apps_str[:250]}\n"
+            f"• **Histórico analisado:** `{len(dossie['mensagens'])}/50` últimas mensagens"
+        ),
+        inline=False,
     )
     await interaction.followup.send(embed=embed)
 
@@ -775,7 +947,7 @@ async def roast(interaction: discord.Interaction, alvo: discord.Member):
         else (interaction.user.voice.channel if (interaction.user.voice and interaction.user.voice.channel) else None)
     )
     if canal and interaction.guild:
-        await falar_no_canal(interaction.guild, canal, zoeira)
+        await falar_no_canal(interaction.guild, canal, zoeira[:500])
 
 
 @tree.command(name="fofoca", description="Envia um plantão de fofoca anônimo falado na call mais cheia!")
@@ -841,7 +1013,7 @@ class DueloView(discord.ui.View):
             color=0x10B981,
         )
         await interaction.followup.send(embed=embed)
-        await executar_punish(interaction, perdedor, minutes=1, reverso=False)
+        await executar_punish(interaction, perdedor, minutes=1, reverso=False, anunciar=False)
 
 
 @tree.command(name="duelo", description="Desafie alguém para um X1 de dados valendo 1 minuto de prisão!")
