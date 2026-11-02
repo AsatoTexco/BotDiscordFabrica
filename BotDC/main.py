@@ -12,7 +12,7 @@ from exs import get_conselho, random_ex, random_joke
 from ias import generate_chatGPT
 from Models.Dj import Dj
 from password_manager import start_password_manager_server
-from text_to_speech import text_to_speech
+from text_to_speech import get_ffmpeg_tts_options, text_to_speech
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VOICES_DIR = os.path.join(BASE_DIR, "voices")
@@ -328,21 +328,9 @@ async def voice(interaction: discord.Interaction, query: str):
 
     await interaction.response.defer(ephemeral=False, thinking=True)
     try:
-        chatResp = await generate_chatGPT(f"Responda de forma curta e objetiva: {query}")
-        output_file = os.path.join(VOICES_DIR, "output_audio.mp3")
-        await asyncio.to_thread(text_to_speech, chatResp, output_file)
-
-        voice_channel = await connectVoice(interaction)
-        if voice_channel is None:
-            await interaction.followup.send("Não consegui conectar ao seu canal de voz.")
-            return
-
-        if voice_channel.is_playing() or voice_channel.is_paused():
-            voice_channel.stop()
-
-        audio = discord.FFmpegPCMAudio(output_file)
-        voice_channel.play(audio)
-
+        chatResp = await generate_chatGPT(
+            f"Responda de forma muito direta, curta e sem enrolação em no máximo 2 frases corridas (sem listas ou tópicos): {query}"
+        )
         embed = discord.Embed(
             title="🗣️ Resposta por Voz",
             description=chatResp[:4000],
@@ -350,6 +338,9 @@ async def voice(interaction: discord.Interaction, query: str):
         )
         embed.set_footer(text=f"Pergunta: {query[:100]}")
         await interaction.followup.send(embed=embed)
+
+        if interaction.guild and interaction.user.voice and interaction.user.voice.channel:
+            await falar_no_canal(interaction.guild, interaction.user.voice.channel, chatResp)
     except Exception as error:
         await interaction.followup.send(f"```{error}```")
 
@@ -596,10 +587,10 @@ async def plagio(interaction: discord.Interaction, alvo: discord.Member):
 
 
 async def falar_no_canal(guild: discord.Guild, channel: discord.VoiceChannel, texto: str):
-    if not guild or not channel:
+    if not guild or not channel or not texto:
         return
     try:
-        output_file = os.path.join(VOICES_DIR, "output_audio.mp3")
+        output_file = os.path.join(VOICES_DIR, f"tts_{guild.id}.mp3")
         await asyncio.to_thread(text_to_speech, texto, output_file)
 
         vc = guild.voice_client
@@ -619,9 +610,15 @@ async def falar_no_canal(guild: discord.Guild, channel: discord.VoiceChannel, te
         if vc and vc.is_connected():
             if vc.is_playing() or vc.is_paused():
                 vc.stop()
-            vc.play(discord.FFmpegPCMAudio(output_file))
+            source = discord.FFmpegPCMAudio(
+                output_file,
+                before_options="-nostdin -fflags +genpts+igndts",
+                options=get_ffmpeg_tts_options(),
+            )
+            vc.play(source)
             while vc.is_connected() and vc.is_playing():
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.15)
+            await asyncio.sleep(0.4)
     except Exception as e:
         print(f"Aviso ao falar no canal: {e}")
 
@@ -900,23 +897,18 @@ async def roast(interaction: discord.Interaction, alvo: discord.Member):
     msg_exemplo = f'"{dossie["mensagens"][0]}"' if dossie["mensagens"] else "absolutamente nada porque vive escondido"
     cargo_destaque = dossie["cargos"][0] if dossie["cargos"] else "sem cargo nenhum"
     fallback_roast = (
-        f"Olha a situação de **{dossie['display_name']}** (`@{dossie['username']}`): entrou no servidor em {dossie['entrou_em']}, "
-        f"ostenta o cargo de *{cargo_destaque}* só de enfeite e está {dossie['info_call'].lower()}. "
-        f"Vasculhei {len(dossie['mensagens'])} mensagens recentes e a maior pérola que conseguiu produzir foi {msg_exemplo}!"
+        f"{dossie['display_name']} está no servidor desde {dossie['entrou_em']}, ostenta o cargo {cargo_destaque} só de enfeite "
+        f"e está {dossie['info_call'].lower()}. Em {len(dossie['mensagens'])} mensagens analisadas, a maior pérola que conseguiu soltar foi {msg_exemplo}!"
     )
 
     prompt_roast = (
-        "Em uma brincadeira de stand-up comedy / roast amigável entre amigos de um servidor de Discord, "
-        "faça uma análise irônica, engraçada, afiada e criativa (em 1 parágrafo de 3 a 5 frases) zoando este perfil com base nos dados reais abaixo:\n"
-        f"- Nome/Nick: {dossie['display_name']} (username: @{dossie['username']}, apelido: {dossie['apelido']})\n"
-        f"- Conta criada em: {dossie['criado_em']} | Entrou no servidor em: {dossie['entrou_em']}\n"
-        f"- Cargos no servidor: {cargos_str}\n"
-        f"- Status na chamada de voz: {dossie['info_call']}\n"
-        f"- Jogos/Apps/Status conectados em execução: {apps_str}\n"
-        f"- Badges do perfil: {badges_str}\n"
-        f"- Total de mensagens analisadas: {len(dossie['mensagens'])}/50\n"
-        f"- Últimas mensagens reais que mandou no servidor: {amostra_msgs}\n"
-        "Cite diretamente os cargos, o jeito que escreve nas mensagens ou o status dele de forma muito bem-humorada!"
+        "Em uma brincadeira de roast entre amigos no Discord, escreva uma zoeira MUITO DIRETA, curta e afiada "
+        "(apenas 2 a 3 frases curtas em texto corrido, sem introduções e sem listas) usando os dados reais abaixo:\n"
+        f"- Nome: {dossie['display_name']} (@{dossie['username']}, apelido: {dossie['apelido']})\n"
+        f"- Entrou no servidor: {dossie['entrou_em']} | Cargos: {cargos_str}\n"
+        f"- Call atual: {dossie['info_call']} | Apps/Jogos: {apps_str} | Badges: {badges_str}\n"
+        f"- Últimas mensagens ({len(dossie['mensagens'])}/50): {amostra_msgs}\n"
+        "Vá direto ao ponto zoando os cargos, as mensagens enviadas e o status dele para ser lido em voz alta rapidamente!"
     )
 
     zoeira = await generate_chatGPT(prompt_roast, fallback=fallback_roast)
@@ -947,7 +939,7 @@ async def roast(interaction: discord.Interaction, alvo: discord.Member):
         else (interaction.user.voice.channel if (interaction.user.voice and interaction.user.voice.channel) else None)
     )
     if canal and interaction.guild:
-        await falar_no_canal(interaction.guild, canal, zoeira[:500])
+        await falar_no_canal(interaction.guild, canal, zoeira)
 
 
 @tree.command(name="fofoca", description="Envia um plantão de fofoca anônimo falado na call mais cheia!")
