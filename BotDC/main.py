@@ -177,14 +177,19 @@ async def commands_cmd(interaction: discord.Interaction):
     )
 
     embed.add_field(
-        name="🎲 Utilitários & Moderação",
+        name="🎲 Utilitários, Jogos & Moderação",
         value=(
             "• `/d <lados>` — Rola um dado (ex: `/d 20`)\n"
             "• `/img <tema>` — Gera uma imagem com IA sobre o tema\n"
             "• `/plagio <alvo>` — Exibe o avatar em alta definição de um membro\n"
             "• `/punish <alvo> <min>` — Prende o membro no canal de punição\n"
             "• `/free <alvo>` — Liberta o prisioneiro\n"
-            "• `/stroll <user>` — Faz o membro passear pelos canais de voz"
+            "• `/stroll <user>` — Faz o membro passear pelos canais de voz\n"
+            "• `/tribunal <acusado> <crime>` — Abre votação com juiz de IA e prisão\n"
+            "• `/roleta` — Roleta russa entre os membros da call atual\n"
+            "• `/roast <alvo>` — IA cria uma zoeira e lê no canal de voz\n"
+            "• `/fofoca <mensagem>` — Plantão anônimo falado na call mais cheia\n"
+            "• `/duelo <oponente>` — X1 de D20 valendo 1 minuto de prisão"
         ),
         inline=False,
     )
@@ -581,6 +586,287 @@ async def plagio(interaction: discord.Interaction, alvo: discord.Member):
     embed.set_image(url=alvo.display_avatar.url)
     embed.set_footer(text=f"Solicitado por {interaction.user.display_name}")
     await interaction.followup.send(embed=embed)
+
+
+async def falar_no_canal(guild: discord.Guild, channel: discord.VoiceChannel, texto: str):
+    if not guild or not channel:
+        return
+    try:
+        output_file = os.path.join(VOICES_DIR, "output_audio.mp3")
+        await asyncio.to_thread(text_to_speech, texto, output_file)
+
+        vc = guild.voice_client
+        if vc is not None:
+            if vc.is_connected():
+                if vc.channel.id != channel.id:
+                    await vc.move_to(channel)
+            else:
+                try:
+                    await vc.disconnect(force=True)
+                except Exception:
+                    pass
+                vc = await channel.connect(timeout=20.0, reconnect=True)
+        else:
+            vc = await channel.connect(timeout=20.0, reconnect=True)
+
+        if vc and vc.is_connected():
+            if vc.is_playing() or vc.is_paused():
+                vc.stop()
+            vc.play(discord.FFmpegPCMAudio(output_file))
+            while vc.is_connected() and vc.is_playing():
+                await asyncio.sleep(0.2)
+    except Exception as e:
+        print(f"Aviso ao falar no canal: {e}")
+
+
+async def executar_stroll_rapido(guild: discord.Guild, member: discord.Member):
+    if not guild or not member or not member.voice or not member.voice.channel:
+        return
+    voice_original = member.voice.channel
+    for c in guild.voice_channels[:5]:
+        if not member.voice or not member.voice.channel:
+            break
+        if c.id != voice_original.id:
+            try:
+                await member.move_to(c)
+                await asyncio.sleep(0.7)
+            except Exception:
+                continue
+    if member.voice and member.voice.channel and voice_original:
+        try:
+            await member.move_to(voice_original)
+        except Exception:
+            pass
+
+
+class TribunalView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=30)
+        self.inocente: set[int] = set()
+        self.culpado: set[int] = set()
+
+    @discord.ui.button(label="Inocente (0)", style=discord.ButtonStyle.success, emoji="✅")
+    async def btn_inocente(self, interaction: discord.Interaction, button: discord.ui.Button):
+        uid = interaction.user.id
+        self.culpado.discard(uid)
+        self.inocente.add(uid)
+        button.label = f"Inocente ({len(self.inocente)})"
+        self.children[1].label = f"Culpado ({len(self.culpado)})"
+        await interaction.response.edit_message(view=self)
+
+    @discord.ui.button(label="Culpado (0)", style=discord.ButtonStyle.danger, emoji="🚨")
+    async def btn_culpado(self, interaction: discord.Interaction, button: discord.ui.Button):
+        uid = interaction.user.id
+        self.inocente.discard(uid)
+        self.culpado.add(uid)
+        self.children[0].label = f"Inocente ({len(self.inocente)})"
+        button.label = f"Culpado ({len(self.culpado)})"
+        await interaction.response.edit_message(view=self)
+
+
+@tree.command(name="tribunal", description="Julgue um membro com votação do servidor, juiz de IA e prisão!")
+async def tribunal(interaction: discord.Interaction, acusado: discord.Member, crime: str):
+    await interaction.response.defer(ephemeral=False, thinking=True)
+
+    if is_protected_user(acusado):
+        await executar_punish(interaction, interaction.user, minutes=1, reverso=True, alvo_protegido=acusado)
+        return
+
+    view = TribunalView()
+    embed = discord.Embed(
+        title="⚖️ Tribunal do Servidor em Sessão!",
+        description=(
+            f"**Réu:** {acusado.mention}\n"
+            f"**Acusação:** *{crime}*\n\n"
+            "⏳ Vocês têm **20 segundos** para votar nos botões abaixo!"
+        ),
+        color=0xF59E0B,
+    )
+    msg = await interaction.followup.send(embed=embed, view=view)
+    await asyncio.sleep(20)
+
+    for child in view.children:
+        child.disabled = True
+    try:
+        await msg.edit(view=view)
+    except Exception:
+        pass
+
+    votos_culpado = len(view.culpado)
+    votos_inocente = len(view.inocente)
+    condenado = votos_culpado > votos_inocente
+
+    resultado_str = "CULPADO" if condenado else "INOCENTE"
+    sentenca = await generate_chatGPT(
+        f"Aja como um juiz debochado e dê uma sentença de 1 frase curta declarando {acusado.display_name} {resultado_str} pelo crime: {crime}"
+    )
+
+    veredito_embed = discord.Embed(
+        title=f"👨‍⚖️ Veredito Final: {resultado_str}!",
+        description=f"*{sentenca}*\n\n🚨 **Culpado:** {votos_culpado} voto(s) | ✅ **Inocente:** {votos_inocente} voto(s)",
+        color=0xEF4444 if condenado else 0x10B981,
+    )
+    await interaction.followup.send(embed=veredito_embed)
+
+    canal_voz = (
+        acusado.voice.channel
+        if (acusado.voice and acusado.voice.channel)
+        else (interaction.user.voice.channel if (interaction.user.voice and interaction.user.voice.channel) else None)
+    )
+    if canal_voz and interaction.guild:
+        await falar_no_canal(interaction.guild, canal_voz, sentenca)
+
+    if condenado:
+        await executar_punish(interaction, acusado, minutes=1, reverso=False)
+
+
+@tree.command(name="roleta", description="Roleta russa entre os membros do seu canal de voz!")
+async def roleta(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=False, thinking=True)
+
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.followup.send("```Entre em um canal de voz primeiro para girar a roleta! 🎲```")
+        return
+
+    canal = interaction.user.voice.channel
+    candidatos = [m for m in canal.members if not m.bot and not is_protected_user(m)]
+    if not candidatos:
+        await interaction.followup.send("```Não há alvos válidos neste canal de voz!```")
+        return
+
+    sorteado = random.choice(candidatos)
+    giro = random.randint(1, 6)
+
+    if giro <= 4:
+        await interaction.followup.send(
+            f"🔫 **Click!** A roleta apontou para {sorteado.mention} (tiro `{giro}/6`), mas a câmara estava vazia! Escapou ileso!"
+        )
+    elif giro == 5:
+        await interaction.followup.send(
+            f"🌀 **Rasante!** A roleta caiu em `{giro}/6` e {sorteado.mention} ganhou um passeio relâmpago pelas calls!"
+        )
+        await executar_stroll_rapido(interaction.guild, sorteado)
+    else:
+        await interaction.followup.send(
+            f"💥 **BANG!** Tirou `{giro}/6`! {sorteado.mention} perdeu na roleta russa e vai direto para a prisão!"
+        )
+        await executar_punish(interaction, sorteado, minutes=1, reverso=False)
+
+
+@tree.command(name="roast", description="A IA cria uma zoeira para o alvo e fala no canal de voz!")
+async def roast(interaction: discord.Interaction, alvo: discord.Member):
+    await interaction.response.defer(ephemeral=False, thinking=True)
+
+    alvo_real = interaction.user if is_protected_user(alvo) else alvo
+    zoeira = await generate_chatGPT(
+        f"Faça uma zoeira curta, engraçada e criativa de 1 ou 2 frases zoando o amigo {alvo_real.display_name} no Discord."
+    )
+
+    embed = discord.Embed(
+        title=f"🔥 Roast para {alvo_real.display_name}",
+        description=zoeira[:4000],
+        color=0xEF4444,
+    )
+    await interaction.followup.send(embed=embed)
+
+    canal = (
+        alvo_real.voice.channel
+        if (alvo_real.voice and alvo_real.voice.channel)
+        else (interaction.user.voice.channel if (interaction.user.voice and interaction.user.voice.channel) else None)
+    )
+    if canal and interaction.guild:
+        await falar_no_canal(interaction.guild, canal, zoeira)
+
+
+@tree.command(name="fofoca", description="Envia um plantão de fofoca anônimo falado na call mais cheia!")
+async def fofoca(interaction: discord.Interaction, mensagem: str):
+    await interaction.response.defer(ephemeral=True, thinking=True)
+
+    if not interaction.guild:
+        await interaction.followup.send("Este comando só funciona em um servidor.", ephemeral=True)
+        return
+
+    canais_com_gente = [
+        c for c in interaction.guild.voice_channels if len([m for m in c.members if not m.bot]) > 0
+    ]
+    if not canais_com_gente:
+        await interaction.followup.send("Não há ninguém em canais de voz no momento para ouvir a fofoca! 🤫", ephemeral=True)
+        return
+
+    canal_alvo = max(canais_com_gente, key=lambda c: len([m for m in c.members if not m.bot]))
+    await interaction.followup.send(
+        f"🕵️ Sua fofoca anônima está sendo transmitida no canal **{canal_alvo.name}**!",
+        ephemeral=True,
+    )
+
+    texto_plantao = f"Atenção servidor, plantão urgente da fofoca: {mensagem}"
+    await falar_no_canal(interaction.guild, canal_alvo, texto_plantao)
+
+
+class DueloView(discord.ui.View):
+    def __init__(self, desafiante: discord.Member, oponente: discord.Member):
+        super().__init__(timeout=60)
+        self.desafiante = desafiante
+        self.oponente = oponente
+        self.finalizado = False
+
+    @discord.ui.button(label="Aceitar Duelo ⚔️", style=discord.ButtonStyle.primary)
+    async def aceitar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.oponente.id:
+            await interaction.response.send_message("Apenas o membro desafiado pode aceitar este duelo!", ephemeral=True)
+            return
+        if self.finalizado:
+            return
+        self.finalizado = True
+        button.disabled = True
+        await interaction.response.edit_message(view=self)
+
+        d1 = random.randint(1, 20)
+        d2 = random.randint(1, 20)
+        while d1 == d2:
+            d1 = random.randint(1, 20)
+            d2 = random.randint(1, 20)
+
+        vencedor = self.desafiante if d1 > d2 else self.oponente
+        perdedor = self.oponente if d1 > d2 else self.desafiante
+
+        embed = discord.Embed(
+            title="⚔️ Resultado do Duelo!",
+            description=(
+                f"🎲 **{self.desafiante.display_name}** tirou **{d1}**\n"
+                f"🎲 **{self.oponente.display_name}** tirou **{d2}**\n\n"
+                f"🏆 **Vencedor:** {vencedor.mention}\n"
+                f"🚨 **Perdedor (1 min de prisão):** {perdedor.mention}"
+            ),
+            color=0x10B981,
+        )
+        await interaction.followup.send(embed=embed)
+        await executar_punish(interaction, perdedor, minutes=1, reverso=False)
+
+
+@tree.command(name="duelo", description="Desafie alguém para um X1 de dados valendo 1 minuto de prisão!")
+async def duelo(interaction: discord.Interaction, oponente: discord.Member):
+    await interaction.response.defer(ephemeral=False, thinking=True)
+
+    if oponente.bot or oponente.id == interaction.user.id:
+        await interaction.followup.send("```Escolha outro membro válido do servidor para duelar! ⚔️```")
+        return
+
+    if is_protected_user(oponente):
+        await executar_punish(interaction, interaction.user, minutes=1, reverso=True, alvo_protegido=oponente)
+        return
+
+    view = DueloView(interaction.user, oponente)
+    embed = discord.Embed(
+        title="⚔️ Desafio de Duelo!",
+        description=(
+            f"{interaction.user.mention} desafiou {oponente.mention} para um X1 de **D20**!\n"
+            "Quem tirar o menor número vai preso por **1 minuto**.\n\n"
+            f"{oponente.mention}, clique no botão abaixo em até 60s para aceitar!"
+        ),
+        color=0x5865F2,
+    )
+    await interaction.followup.send(embed=embed, view=view)
 
 
 if __name__ == "__main__":
