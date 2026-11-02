@@ -20,6 +20,7 @@ DEFAULT_KEYS = [
     "TOKEN",
     "EDENAI_API_KEY",
     "DONOS",
+    "PROTECTED_USERS",
     "GUILD_IDS",
     "STARTUP_CHANNEL_ID",
     "PRISAO_CHANNEL_ID",
@@ -49,6 +50,12 @@ KEY_METADATA = {
         "desc": "Nomes de usuário do Discord com permissão máxima (separados por vírgula)",
         "badge": "badge-emerald",
         "default": "",
+    },
+    "PROTECTED_USERS": {
+        "label": "Usuários Protegidos (Anti-Sequestro)",
+        "desc": "IDs ou nomes de usuários imunes a /stroll e /punish — quem tentar usá-los como alvo é punido (separados por vírgula)",
+        "badge": "badge-amber",
+        "default": "408471589366136833,asatotexco",
     },
     "GUILD_IDS": {
         "label": "IDs dos Servidores",

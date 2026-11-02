@@ -24,6 +24,7 @@ load_dotenv(os.path.join(os.path.dirname(BASE_DIR), ".env"))
 DEFAULT_GUILD_IDS = [722857509659869204, 1046231965872967690]
 DEFAULT_STARTUP_CHANNEL_ID = 1176698533039059055
 DEFAULT_PRISAO_CHANNEL_ID = 1269379224129634434
+DEFAULT_PROTECTED_USERS = ["408471589366136833", "asatotexco"]
 
 
 def get_guild_ids() -> list[int]:
@@ -50,6 +51,26 @@ def get_prisao_channel_id() -> int:
 def get_donos() -> list[str]:
     raw = os.getenv("DONOS", "").strip()
     return [d.strip().lower() for d in raw.split(",") if d.strip()]
+
+
+def get_protected_users() -> list[str]:
+    raw = os.getenv("PROTECTED_USERS", "408471589366136833,asatotexco").strip()
+    users = [u.strip().lower() for u in raw.split(",") if u.strip()]
+    return users if users else DEFAULT_PROTECTED_USERS
+
+
+def is_protected_user(member: discord.Member) -> bool:
+    if not member:
+        return False
+    protected = get_protected_users()
+    candidates = {
+        str(member.id),
+        member.name.lower(),
+        member.display_name.lower(),
+    }
+    if getattr(member, "global_name", None):
+        candidates.add(member.global_name.lower())
+    return any(c in protected for c in candidates)
 
 
 punishments: dict[int, discord.VoiceChannel | None] = {}
@@ -358,9 +379,113 @@ async def resume(interaction: discord.Interaction):
     await dj.resumeMusic(interaction=interaction)
 
 
+async def executar_punish(
+    interaction: discord.Interaction,
+    alvo: discord.Member,
+    minutes: int = 1,
+    reverso: bool = False,
+    alvo_protegido: discord.Member | None = None,
+):
+    if not interaction.guild or not isinstance(alvo, discord.Member):
+        await interaction.followup.send("```Este comando só pode ser utilizado dentro de um servidor.```")
+        return
+
+    if not reverso and minutes < 1:
+        await interaction.followup.send("```O tempo de punição deve ser de pelo menos 1 minuto.```")
+        return
+
+    minutes = max(1, minutes)
+
+    if alvo.voice is None or alvo.voice.channel is None:
+        if reverso and alvo_protegido is not None:
+            await interaction.followup.send(
+                f"🔄 **Feitiço virou contra o feiticeiro!** {alvo.mention} tentou usar o comando em {alvo_protegido.mention}, mas não está em um canal de voz para ser preso!"
+            )
+        else:
+            await interaction.followup.send("```O usuário não está em um canal de voz!```")
+        return
+
+    minutes_punish = min(minutes, 60) * 60
+    prisao_id = get_prisao_channel_id()
+    if not prisao_id:
+        await interaction.followup.send("```Canal de prisão não configurado. Defina PRISAO_CHANNEL_ID no .env.```")
+        return
+
+    prisao = interaction.guild.get_channel(prisao_id) or bot.get_channel(prisao_id)
+    if prisao is None:
+        await interaction.followup.send("```Canal de prisão não encontrado no servidor.```")
+        return
+
+    voice_original = alvo.voice.channel if (alvo.voice and alvo.voice.channel) else None
+    punishments[alvo.id] = voice_original
+
+    if reverso and alvo_protegido is not None:
+        await interaction.followup.send(
+            f"🔄 **Feitiço virou contra o feiticeiro!** {alvo.mention} tentou sequestrar {alvo_protegido.mention} e foi detido por {minutes} minuto(s)! 🚨"
+        )
+    else:
+        await interaction.followup.send(f"🚨 {alvo.mention} foi detido por {minutes} minuto(s)!")
+
+    if voice_original is not None:
+        try:
+            vc = interaction.guild.voice_client
+            if vc is not None:
+                if vc.is_connected():
+                    if vc.channel.id != voice_original.id:
+                        await vc.move_to(voice_original)
+                else:
+                    try:
+                        await vc.disconnect(force=True)
+                    except Exception:
+                        pass
+                    vc = await voice_original.connect(timeout=20.0, reconnect=True)
+            else:
+                vc = await voice_original.connect(timeout=20.0, reconnect=True)
+
+            if vc and vc.is_connected():
+                if vc.is_playing() or vc.is_paused():
+                    vc.stop()
+
+                sirene_path = os.path.join(VOICES_DIR, "sirene_grave.mp3")
+                enquadro_path = os.path.join(VOICES_DIR, "enquadro_bot.mp3")
+
+                if os.path.exists(sirene_path):
+                    vc.play(discord.FFmpegPCMAudio(sirene_path))
+                    while vc.is_connected() and vc.is_playing():
+                        await asyncio.sleep(0.2)
+
+                if os.path.exists(enquadro_path) and vc.is_connected():
+                    vc.play(discord.FFmpegPCMAudio(enquadro_path))
+                    while vc.is_connected() and vc.is_playing():
+                        await asyncio.sleep(0.2)
+        except Exception as error:
+            print(f"Aviso durante áudio de enquadro: {error}")
+
+    start = time.time()
+    while (time.time() - start) <= minutes_punish and (alvo.id in punishments):
+        if alvo.voice and alvo.voice.channel and alvo.voice.channel.id != prisao.id:
+            try:
+                await alvo.move_to(prisao)
+            except Exception:
+                pass
+        await asyncio.sleep(1.0)
+
+    if alvo.id in punishments:
+        orig = punishments.pop(alvo.id, None)
+        if alvo.voice and alvo.voice.channel and orig:
+            try:
+                await alvo.move_to(orig)
+            except Exception:
+                pass
+
+
 @tree.command(name="stroll", description="Faz o membro passear temporariamente pelas chamadas de voz")
 async def stroll(interaction: discord.Interaction, user: discord.Member):
     await interaction.response.defer(ephemeral=False, thinking=True)
+
+    if is_protected_user(user):
+        await executar_punish(interaction, interaction.user, minutes=1, reverso=True, alvo_protegido=user)
+        return
 
     donos = get_donos()
     if donos and user.name.lower() in donos and interaction.user.name.lower() not in donos:
@@ -391,7 +516,7 @@ async def stroll(interaction: discord.Interaction, user: discord.Member):
             except discord.DiscordException:
                 continue
 
-    if user.voice is not None and voice_original is not None:
+    if user.voice is not None and user.voice.channel is not None and voice_original is not None:
         try:
             await user.move_to(voice_original)
         except discord.DiscordException:
@@ -404,6 +529,10 @@ async def stroll(interaction: discord.Interaction, user: discord.Member):
 async def punish(interaction: discord.Interaction, alvo: discord.Member, minutes: int):
     await interaction.response.defer(ephemeral=False, thinking=True)
 
+    if is_protected_user(alvo):
+        await executar_punish(interaction, interaction.user, minutes=max(1, minutes), reverso=True, alvo_protegido=alvo)
+        return
+
     donos = get_donos()
     if donos and alvo.name.lower() in donos and interaction.user.name.lower() not in donos:
         await interaction.followup.send("```Você não possui permissão para punir este membro! 🤫```")
@@ -414,66 +543,7 @@ async def punish(interaction: discord.Interaction, alvo: discord.Member, minutes
         await interaction.followup.send("```Você não possui o cargo necessário para isso! 🤫```")
         return
 
-    if minutes < 1:
-        await interaction.followup.send("```O tempo de punição deve ser de pelo menos 1 minuto.```")
-        return
-
-    minutes_punish = min(minutes, 60) * 60
-    prisao_id = get_prisao_channel_id()
-    if not prisao_id:
-        await interaction.followup.send("```Canal de prisão não configurado. Defina PRISAO_CHANNEL_ID no .env.```")
-        return
-
-    prisao = bot.get_channel(prisao_id)
-    if prisao is None:
-        await interaction.followup.send("```Canal de prisão não encontrado no servidor.```")
-        return
-
-    voice_original = alvo.voice.channel if (alvo.voice and alvo.voice.channel) else None
-    punishments[alvo.id] = voice_original
-
-    await interaction.followup.send(f"🚨 {alvo.mention} foi detido por {minutes} minuto(s)!")
-
-    if voice_original is not None:
-        try:
-            vc = interaction.guild.voice_client
-            if vc is not None and vc.is_connected():
-                if vc.channel.id != voice_original.id:
-                    await vc.move_to(voice_original)
-            else:
-                vc = await voice_original.connect()
-
-            sirene_path = os.path.join(VOICES_DIR, "sirene_grave.mp3")
-            enquadro_path = os.path.join(VOICES_DIR, "enquadro_bot.mp3")
-
-            if os.path.exists(sirene_path):
-                vc.play(discord.FFmpegPCMAudio(sirene_path))
-                while vc.is_playing():
-                    await asyncio.sleep(0.2)
-
-            if os.path.exists(enquadro_path):
-                vc.play(discord.FFmpegPCMAudio(enquadro_path))
-                while vc.is_playing():
-                    await asyncio.sleep(0.2)
-        except Exception as error:
-            print(f"Aviso durante áudio de enquadro: {error}")
-
-    start = time.time()
-    while (time.time() - start) <= minutes_punish and (alvo.id in punishments):
-        if alvo.voice and alvo.voice.channel and alvo.voice.channel.id != prisao.id:
-            try:
-                await alvo.move_to(prisao)
-            except discord.DiscordException:
-                pass
-        await asyncio.sleep(1.0)
-
-    if alvo.id in punishments:
-        orig = punishments.pop(alvo.id, None)
-        if alvo.voice and orig:
-            try:
-                await alvo.move_to(orig)
-            except discord.DiscordException:
-                pass
+    await executar_punish(interaction, alvo, minutes=minutes, reverso=False)
 
 
 @tree.command(name="free", description="Liberta o prisioneiro")

@@ -58,6 +58,7 @@ TOKEN=seu_discord_bot_token_aqui
 EDENAI_API_KEY=sua_chave_edenai_aqui
 MASTER_PASSWORD=sua_senha_do_painel_web
 DONOS=seu_usuario_discord
+PROTECTED_USERS=408471589366136833,asatotexco
 GUILD_IDS=
 STARTUP_CHANNEL_ID=
 PRISAO_CHANNEL_ID=
@@ -69,6 +70,7 @@ PRISAO_CHANNEL_ID=
 | `MASTER_PASSWORD` | Senha para acessar o gerenciador em `http://localhost:8022` | `admin123` |
 | `EDENAI_API_KEY` | Chave de API da EdenAI (possui fallback gratuito) | Opcional |
 | `DONOS` | Nomes de usuário do Discord com permissão total | Opcional |
+| `PROTECTED_USERS` | IDs ou nomes de usuários imunes a `/stroll` e `/punish` (reverte punição) | `408471589366136833,asatotexco` |
 | `GUILD_IDS` | IDs dos servidores para registrar comandos slash | Opcional |
 | `STARTUP_CHANNEL_ID` | Canal de texto para mensagem de inicialização | Opcional |
 | `PRISAO_CHANNEL_ID` | Canal de voz de detenção do comando `/punish` | Opcional |
