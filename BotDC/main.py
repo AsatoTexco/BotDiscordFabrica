@@ -12,7 +12,7 @@ from exs import get_conselho, random_ex, random_joke
 from ias import generate_chatGPT
 from Models.Dj import Dj
 from password_manager import start_password_manager_server
-from text_to_speech import get_ffmpeg_tts_options, text_to_speech
+from text_to_speech import gerar_audios_tts, text_to_speech
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VOICES_DIR = os.path.join(BASE_DIR, "voices")
@@ -322,7 +322,8 @@ async def connectVoice(interaction: discord.Interaction):
 
 @tree.command(name="voice", description="Faça uma pergunta e ouça a resposta no canal de voz!")
 async def voice(interaction: discord.Interaction, query: str):
-    if not interaction.user.voice or not interaction.user.voice.channel:
+    canal_usuario = obter_canal_voz_ativo(interaction)
+    if not canal_usuario:
         await interaction.response.send_message("Entre em um canal de voz primeiro para eu falar com você! 🎤", ephemeral=True)
         return
 
@@ -339,8 +340,8 @@ async def voice(interaction: discord.Interaction, query: str):
         embed.set_footer(text=f"Pergunta: {query[:100]}")
         await interaction.followup.send(embed=embed)
 
-        if interaction.guild and interaction.user.voice and interaction.user.voice.channel:
-            await falar_no_canal(interaction.guild, interaction.user.voice.channel, chatResp)
+        if interaction.guild and canal_usuario:
+            await falar_no_canal(interaction.guild, canal_usuario, chatResp)
     except Exception as error:
         await interaction.followup.send(f"```{error}```")
 
@@ -586,41 +587,83 @@ async def plagio(interaction: discord.Interaction, alvo: discord.Member):
     await interaction.followup.send(embed=embed)
 
 
+def obter_canal_voz_ativo(
+    interaction: discord.Interaction,
+    alvo: discord.Member | None = None,
+) -> discord.VoiceChannel | None:
+    guild = interaction.guild
+    if not guild:
+        return None
+
+    for membro in (alvo, interaction.user):
+        if not membro:
+            continue
+        if getattr(membro, "voice", None) and membro.voice.channel:
+            return membro.voice.channel
+        for ch in guild.voice_channels:
+            if any(m.id == membro.id for m in ch.members):
+                return ch
+
+    if guild.voice_client and guild.voice_client.is_connected() and guild.voice_client.channel:
+        return guild.voice_client.channel
+
+    canais_ativos = [c for c in guild.voice_channels if any(not m.bot for m in c.members)]
+    if canais_ativos:
+        return max(canais_ativos, key=lambda c: len([m for m in c.members if not m.bot]))
+    return None
+
+
 async def falar_no_canal(guild: discord.Guild, channel: discord.VoiceChannel, texto: str):
     if not guild or not channel or not texto:
         return
+    arquivos: list[str] = []
     try:
-        output_file = os.path.join(VOICES_DIR, f"tts_{guild.id}.mp3")
-        await asyncio.to_thread(text_to_speech, texto, output_file)
+        arquivos = await asyncio.to_thread(gerar_audios_tts, texto, VOICES_DIR, f"tts_{guild.id}")
+        if not arquivos:
+            return
 
         vc = guild.voice_client
+        recem_conectado = False
         if vc is not None:
             if vc.is_connected():
                 if vc.channel.id != channel.id:
                     await vc.move_to(channel)
+                    recem_conectado = True
             else:
                 try:
                     await vc.disconnect(force=True)
                 except Exception:
                     pass
                 vc = await channel.connect(timeout=20.0, reconnect=True)
+                recem_conectado = True
         else:
             vc = await channel.connect(timeout=20.0, reconnect=True)
+            recem_conectado = True
 
-        if vc and vc.is_connected():
-            if vc.is_playing() or vc.is_paused():
-                vc.stop()
-            source = discord.FFmpegPCMAudio(
-                output_file,
-                before_options="-nostdin -fflags +genpts+igndts",
-                options=get_ffmpeg_tts_options(),
-            )
-            vc.play(source)
+        if not vc or not vc.is_connected():
+            return
+
+        if recem_conectado:
+            await asyncio.sleep(0.35)
+
+        if vc.is_playing() or vc.is_paused():
+            vc.stop()
+
+        for arq in arquivos:
+            if not vc.is_connected():
+                break
+            vc.play(discord.FFmpegPCMAudio(arq))
             while vc.is_connected() and vc.is_playing():
-                await asyncio.sleep(0.15)
-            await asyncio.sleep(0.4)
+                await asyncio.sleep(0.1)
     except Exception as e:
         print(f"Aviso ao falar no canal: {e}")
+    finally:
+        for arq in arquivos:
+            try:
+                if os.path.exists(arq):
+                    os.remove(arq)
+            except OSError:
+                pass
 
 
 async def executar_stroll_rapido(guild: discord.Guild, member: discord.Member):
@@ -741,11 +784,7 @@ async def tribunal(interaction: discord.Interaction, acusado: discord.Member, cr
     )
     await interaction.followup.send(embed=veredito_embed)
 
-    canal_voz = (
-        acusado.voice.channel
-        if (acusado.voice and acusado.voice.channel)
-        else (interaction.user.voice.channel if (interaction.user.voice and interaction.user.voice.channel) else None)
-    )
+    canal_voz = obter_canal_voz_ativo(interaction, acusado)
     if canal_voz and interaction.guild:
         await falar_no_canal(interaction.guild, canal_voz, sentenca)
 
@@ -933,11 +972,7 @@ async def roast(interaction: discord.Interaction, alvo: discord.Member):
     )
     await interaction.followup.send(embed=embed)
 
-    canal = (
-        alvo_real.voice.channel
-        if (alvo_real.voice and alvo_real.voice.channel)
-        else (interaction.user.voice.channel if (interaction.user.voice and interaction.user.voice.channel) else None)
-    )
+    canal = obter_canal_voz_ativo(interaction, alvo_real)
     if canal and interaction.guild:
         await falar_no_canal(interaction.guild, canal, zoeira)
 
